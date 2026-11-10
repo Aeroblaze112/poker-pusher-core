@@ -64,7 +64,7 @@ godot --path . -- --usertest
 godot --path . -- --user 名字 --pwd 密码
 ```
 
-常用参数：`--players`（2/4/5/6，3 人只在联机可达）、`--seed`、`--games`、`--s0`…`--s5`（按座位指定策略）、`--logfile`、`--net host|join`、`--ip`、`--port`、`--name`、`--expect`、`--shot`、`--shotmenu`。
+常用参数：`--players`（2/4/5/6）、`--seed`、`--games`、`--s0`…`--s5`（按座位指定策略）、`--logfile`、`--net host|join`、`--ip`、`--port`、`--name`、`--expect`、`--shot`、`--shotmenu`。
 
 `--shot` / `--shotmenu` 是调试截屏，需要窗口模式，不能配 `--headless`。
 

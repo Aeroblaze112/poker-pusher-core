@@ -614,7 +614,7 @@ func _net_begin() -> void:
 		net.seat_peers = net.lobby_peers.duplicate()
 		net.seat_names = net.lobby_names.duplicate()
 	if not (net.seat_names.size() in PLAYER_COUNTS):
-		ui.set_lobby_status("当前 %d 人，只支持 2 / 4 / 5 / 6 人开局" % net.seat_names.size())
+		ui.set_lobby_status("只支持 2 / 4 / 5 / 6 人开局（3 人模式已移除）")
 		_tlog("BEGIN refused players=%d" % net.seat_names.size())
 		return
 	player_count = net.seat_names.size()

@@ -108,10 +108,15 @@ func show_lobby(i_am_host: bool) -> void:
 	_lobby_status.text = "" if i_am_host else "已连接，等待主机开始……"
 
 
+const SEAT_COUNTS := [2, 4, 5, 6]   # 3 人模式已移除：只认这几个座位数
+
+
 func update_lobby(names: Array, i_am_host: bool) -> void:
 	_lobby_list.text = "已连接 %d 人：\n%s" % [names.size(), "\n".join(names)]
 	_start_net_btn.visible = i_am_host
-	_start_net_btn.disabled = names.size() < 2
+	var ok := names.size() in SEAT_COUNTS
+	_start_net_btn.disabled = not ok
+	_start_net_btn.tooltip_text = "" if ok else "只支持 2 / 4 / 5 / 6 人开局"
 
 
 func set_lobby_status(t: String) -> void:
