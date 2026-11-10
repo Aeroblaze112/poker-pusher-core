@@ -863,7 +863,7 @@ func show_end_banner(text: String, can_restart: bool) -> void:
 	var wrap := CenterContainer.new()
 	wrap.mouse_filter = Control.MOUSE_FILTER_PASS
 	wrap.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	wrap.offset_top = 500.0   # 压在手牌区：终局手牌已清空，不挡任何人的分板
+	wrap.offset_top = 520.0   # 压在手牌区：终局手牌已清空，不挡任何人的分板
 	wrap.z_index = 60
 	var card := PanelContainer.new()
 	card.theme_type_variation = &"Card"
