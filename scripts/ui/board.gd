@@ -15,6 +15,7 @@ signal reconnect_pressed
 @onready var joker_tex: TextureRect = $Root/TopBar/JokerTex
 @onready var joker_label: Label = $Root/TopBar/JokerLabel
 @onready var piles_label: Label = $Root/TopBar/PilesLabel
+@onready var d2_btn: Button = $Root/TopBar/D2Btn
 @onready var table_row: HBoxContainer = $Root/Mid/TableHolder/TableRow
 @onready var hand_fan: Control = $Root/Bottom/BottomRow/Bvb/HandFan
 @onready var prompt_label: Label = $Root/Bottom/BottomRow/Bvb/PromptRow/PromptLabel

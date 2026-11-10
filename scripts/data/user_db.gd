@@ -80,7 +80,7 @@ static func _hash(salt: String, pwd: String) -> String:
 	return (salt + "|" + pwd).sha256_text()
 
 
-## 记一局：累计场次/胜场，维护最佳与最近得分
+## 记一局：累计场次/胜场，维护最佳与最近得分，并留一条历史（最多 30 局）
 func record_game(pname: String, score: int, won: bool) -> void:
 	load_db()  # 先合并磁盘最新数据，再改再存
 	if not users.has(pname):
@@ -90,6 +90,11 @@ func record_game(pname: String, score: int, won: bool) -> void:
 	u.wins = int(u.wins) + int(won)
 	u.best = maxi(int(u.best), score)
 	u.last = score
+	var hist: Array = u.get("history", [])
+	hist.append({"t": int(Time.get_unix_time_from_system()), "s": score, "w": 1 if won else 0})
+	while hist.size() > 30:
+		hist.pop_front()
+	u.history = hist
 	_save()
 
 

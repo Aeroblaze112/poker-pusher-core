@@ -15,6 +15,7 @@ signal reconnect_requested
 signal login_requested(pname: String, pwd: String)
 signal register_requested(pname: String, pwd: String)
 signal logout_requested
+signal stats_requested
 
 var game  # 主控制器（场景根 Control 节点），动态访问其状态字段
 var player_count := 4     # 本局人数（构建布局前由控制器写入）
@@ -29,6 +30,7 @@ var round_label: Label
 var phase_label: Label
 var joker_label: Label
 var piles_label: Label
+var d2_btn: Button
 var prompt_label: Label
 var log_view: RichTextLabel
 var table_row: HBoxContainer
@@ -40,6 +42,8 @@ var d2_popup: PanelContainer    # 弃牌堆2 查看弹窗
 var d2_title: Label
 var d2_flow: HFlowContainer
 var rules_popup: PanelContainer    # 玩法说明页（首页入口打开，懒构建）
+var stats_popup: PanelContainer    # 战绩页
+var settings_popup: PanelContainer # 设置页
 var confirm_btn: Button
 var restart_btn: Button
 
@@ -167,6 +171,7 @@ func build() -> void:
 	phase_label = board.phase_label
 	joker_label = board.joker_label
 	piles_label = board.piles_label
+	d2_btn = board.d2_btn
 	prompt_label = board.prompt_label
 	joker_tex = board.joker_tex
 	back_icon = board.back_icon
@@ -259,6 +264,8 @@ func _build_start_menu() -> void:
 	_menu.join_requested.connect(join_requested.emit)
 	_menu.start_net_requested.connect(start_net_requested.emit)
 	_menu.rules_requested.connect(show_rules)
+	_menu.stats_requested.connect(func() -> void: stats_requested.emit())
+	_menu.settings_requested.connect(show_settings)
 
 
 ## 账户状态、联机大厅这些都住在菜单场景里，这里只做转发
@@ -306,10 +313,16 @@ func build_strips() -> void:
 		_: seats = _seats_for_four()
 	for i in seats.size():
 		var s: Array = seats[i]
-		_make_build_strip(1 + i, s[2], s[0], s[1])
+		# 座位坐标是按 1280×486 的设计区手写的；窗口比例不同时（4:3 / 21:9）
+		# 整块等比缩放后居中，别让桌子歪到一边
+		var k := minf(area.x / DESIGN_AREA.x, area.y / DESIGN_AREA.y)
+		var off := (area - DESIGN_AREA * k) * 0.5
+		var pos: Vector2 = off + (s[0] as Vector2) * k
+		_make_build_strip(1 + i, (s[2] as float) * k, pos, s[1])
 
 
 ## 每个座位：[落点, 旋转弧度, 缩放]，坐标按 1280×486 的牌桌区手摆
+const DESIGN_AREA := Vector2(1280, 486)
 ## 2 人：对手正对面
 func _seats_for_two() -> Array:
 	return [
@@ -636,6 +649,26 @@ func _rules_page():
 	return page
 
 
+# ============================== 战绩 / 设置 ==============================
+## 战绩页：数据由主控从 UserDB 取好后传进来
+func show_stats(pname: String, stats: Dictionary) -> void:
+	if not is_instance_valid(stats_popup):
+		var page = (load("res://scenes/ui/stats_page.tscn") as PackedScene).instantiate()
+		game.add_child(page)
+		stats_popup = page
+	stats_popup.open(pname, stats)
+	game.move_child(stats_popup, game.get_child_count() - 1)
+
+
+func show_settings() -> void:
+	if not is_instance_valid(settings_popup):
+		var page = (load("res://scenes/ui/settings_page.tscn") as PackedScene).instantiate()
+		game.add_child(page)
+		settings_popup = page
+	settings_popup.open()
+	game.move_child(settings_popup, game.get_child_count() - 1)
+
+
 # ============================== 动画 ==============================
 func center_of(n: Control) -> Vector2:
 	return n.get_global_rect().get_center() - game.get_global_rect().position
@@ -679,6 +712,66 @@ func anim_deal(p: PPlayer) -> void:
 ## 弃牌动画：牌从玩家飞到顶栏牌堆区
 func anim_discard(p: PPlayer, c: PCard) -> void:
 	await fly(card_tex(c), player_center(p), center_of(piles_label), 0.35)
+
+
+## 效果牌「弃」：先翻个面，再飞进弃牌堆2的按钮
+func anim_effect_discard(p: PPlayer, c: PCard) -> void:
+	if game.SIM or game.AUTO:
+		return
+	var t := TextureRect.new()
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+	t.texture = card_tex(c)
+	t.size = Vector2(76, 106)
+	t.pivot_offset = t.size * 0.5
+	t.position = player_center(p) - t.size / 2
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	t.z_index = 100
+	game.add_child(t)
+	var flip: Tween = game.create_tween()
+	flip.tween_property(t, "scale:x", 0.0, 0.10).set_ease(Tween.EASE_IN)
+	flip.tween_callback(func() -> void: t.texture = load_tex("res://assets/ui/牌面/牌背.png"))
+	flip.tween_property(t, "scale:x", 1.0, 0.10).set_ease(Tween.EASE_OUT)
+	await flip.finished
+	var go: Tween = game.create_tween()
+	var target := center_of(d2_btn)
+	go.set_parallel(true)
+	go.tween_property(t, "position", target - t.size / 2, 0.30).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	go.tween_property(t, "scale", Vector2(0.45, 0.45), 0.30)
+	go.tween_property(t, "modulate:a", 0.2, 0.30)
+	await go.finished
+	t.queue_free()
+
+
+## 效果牌「摸」：牌背从抽牌堆顶上弹出来，再落到该玩家那一侧
+func anim_effect_draw(p: PPlayer) -> void:
+	if game.SIM or game.AUTO:
+		return
+	var from := center_of(back_icon) + Vector2(0, 52)   # 从顶栏牌堆下方冒出，别顶着屏幕上沿
+	var t := TextureRect.new()
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+	t.texture = load_tex("res://assets/ui/牌面/牌背.png")
+	t.size = Vector2(76, 106)
+	t.pivot_offset = t.size * 0.5
+	t.position = from - t.size / 2
+	t.scale = Vector2(0.2, 0.2)
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	t.z_index = 100
+	game.add_child(t)
+	var pop: Tween = game.create_tween()
+	pop.set_parallel(true)
+	pop.tween_property(t, "scale", Vector2(1.15, 1.15), 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	pop.tween_property(t, "position", from - t.size / 2 + Vector2(0, -10), 0.12)
+	await pop.finished
+	var to := player_center(p)
+	var go: Tween = game.create_tween()
+	go.set_parallel(true)
+	go.tween_property(t, "position", to - t.size / 2, 0.26).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	go.tween_property(t, "scale", Vector2(0.55, 0.55), 0.26)
+	go.tween_property(t, "modulate:a", 0.0, 0.26)
+	await go.finished
+	t.queue_free()
 
 
 ## 技能牌结算脉冲：效果牌在桌心放大发光后消散

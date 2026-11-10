@@ -11,6 +11,8 @@ signal host_requested(port: int, pname: String)
 signal join_requested(ip: String, port: int, pname: String)
 signal start_net_requested
 signal rules_requested
+signal stats_requested
+signal settings_requested
 
 const DIFFICULTY_KEYS := ["easy", "normal", "hard"]
 
@@ -48,6 +50,8 @@ func _ready() -> void:
 	$Center/MenuCard/Margin/VBox/AccountForm/RegisterBtn.pressed.connect(_on_register_pressed)
 	$Center/MenuCard/Margin/VBox/AccountInfo/LogoutBtn.pressed.connect(func() -> void: logout_requested.emit())
 	$Center/MenuCard/Margin/VBox/RulesRow/RulesBtn.pressed.connect(func() -> void: rules_requested.emit())
+	$Center/MenuCard/Margin/VBox/RulesRow/StatsBtn.pressed.connect(func() -> void: stats_requested.emit())
+	$Center/MenuCard/Margin/VBox/RulesRow/SettingsBtn.pressed.connect(func() -> void: settings_requested.emit())
 	$Center/MenuCard/Margin/VBox/ButtonRow/HostBtn.pressed.connect(_on_host_pressed)
 	$Center/MenuCard/Margin/VBox/ButtonRow/JoinBtn.pressed.connect(_on_join_pressed)
 	_start_net_btn.pressed.connect(func() -> void: start_net_requested.emit())

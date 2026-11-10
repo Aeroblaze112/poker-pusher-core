@@ -134,11 +134,22 @@ text = "智能择"
 
 [node name="RulesRow" type="HBoxContainer" parent="Center/MenuCard/Margin/VBox"]
 alignment = 1
+theme_override_constants/separation = 8
 
 [node name="RulesBtn" type="Button" parent="Center/MenuCard/Margin/VBox/RulesRow"]
-custom_minimum_size = Vector2(150, 34)
-theme_override_font_sizes/font_size = 15
+custom_minimum_size = Vector2(118, 34)
+theme_override_font_sizes/font_size = 14
 text = "玩法说明"
+
+[node name="StatsBtn" type="Button" parent="Center/MenuCard/Margin/VBox/RulesRow"]
+custom_minimum_size = Vector2(118, 34)
+theme_override_font_sizes/font_size = 14
+text = "战绩"
+
+[node name="SettingsBtn" type="Button" parent="Center/MenuCard/Margin/VBox/RulesRow"]
+custom_minimum_size = Vector2(118, 34)
+theme_override_font_sizes/font_size = 14
+text = "设置"
 
 [node name="Separator" type="HSeparator" parent="Center/MenuCard/Margin/VBox"]
 

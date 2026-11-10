@@ -11,6 +11,7 @@ extends Control
 
 const CliOptions := preload("res://scripts/dev/cli_options.gd")
 const UserSelftest := preload("res://scripts/dev/user_selftest.gd")
+const GameSettings := preload("res://scripts/game/game_settings.gd")
 const Deck := preload("res://scripts/game/deck.gd")
 const UserSession := preload("res://scripts/game/user_session.gd")
 const RoundFlow := preload("res://scripts/game/round_flow.gd")
@@ -80,6 +81,8 @@ var _picked: Array = []
 func _ready() -> void:
 	randomize()
 	flow = RoundFlow.new(self)   # 流程模块先就位：命令行自测/模拟会立刻用它
+	GameSettings.load()          # 音量 / 全屏 / 窗口尺寸，启动即生效
+	GameSettings.apply()
 	# Godot 4 中引擎参数与用户参数（-- 之后）分开返回，两处都要读
 	var opt := CliOptions.parse(OS.get_cmdline_args() + OS.get_cmdline_user_args())
 	AUTO = opt.get("auto", false) or opt.get("autonet", false)
@@ -152,6 +155,7 @@ func _ready() -> void:
 	ui.login_requested.connect(_on_login)
 	ui.register_requested.connect(_on_register)
 	ui.logout_requested.connect(_on_logout)
+	ui.stats_requested.connect(_on_stats_requested)
 	if _cli_user != "":  # 命令行直接登录（测试用）：不存在则顺手注册
 		var err := session.login_cli(_cli_user, _cli_pwd)
 		if err == "":
@@ -518,6 +522,14 @@ func _on_register(pname: String, pwd: String) -> void:
 func _on_logout() -> void:
 	session.logout()
 	ui.set_account("", {})
+
+
+## 战绩页：登录了就看账号，游客给一句提示
+func _on_stats_requested() -> void:
+	if session.name == "":
+		ui.show_stats("游客", {"games": 0, "wins": 0, "best": 0, "last": 0})
+		return
+	ui.show_stats(session.name, session.stats())
 
 
 ## 登录生效：锁联机名（联机座位身份 = 账号名）、刷新账户面板

@@ -260,8 +260,9 @@ func _apply_effect(rank: int) -> void:
 			game.discard2.append(chosen)
 			game.glog("%s 弃 %s 入弃牌堆2" % [p.pname, chosen.txt()])
 			game._refresh_all()
-			await game._anim_discard(p, chosen)
-			await game._pause(0.4)
+			if not (game.SIM or game.AUTO):
+				await game.ui.anim_effect_discard(p, chosen)
+			await game._pause(0.25)
 	elif rank == 12:  # 摸：每人 2 张，转圈发（每圈每人 1 张），防牌不均；不够一圈 → 全不发并终局
 		for pass_i in 2:
 			if _pool_size() < game.players.size():
@@ -270,6 +271,8 @@ func _apply_effect(rank: int) -> void:
 				break
 			game.glog("【摸】第 %d 圈：给所有人发 1 张" % (pass_i + 1))
 			for p in game.players:
+				if not (game.SIM or game.AUTO):
+					await game.ui.anim_effect_draw(p)
 				await _deal_one_free(p)
 			game._refresh_all()
 			await game._pause(0.3)
