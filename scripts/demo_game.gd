@@ -613,6 +613,10 @@ func _net_begin() -> void:
 	if net.seat_peers.is_empty():  # 首局：按大厅报到顺序固定名册；重开沿用旧名册
 		net.seat_peers = net.lobby_peers.duplicate()
 		net.seat_names = net.lobby_names.duplicate()
+	if not (net.seat_names.size() in PLAYER_COUNTS):
+		ui.set_lobby_status("当前 %d 人，只支持 2 / 4 / 5 / 6 人开局" % net.seat_names.size())
+		_tlog("BEGIN refused players=%d" % net.seat_names.size())
+		return
 	player_count = net.seat_names.size()
 	_net_started = true
 	_tlog("BEGIN players=%d names=%s" % [player_count, str(net.seat_names)])
