@@ -68,7 +68,3 @@ godot --path . -- --user 名字 --pwd 密码
 
 `--shot` / `--shotmenu` 是调试截屏，需要窗口模式，不能配 `--headless`。
 
-## 工作约定
-
-- 临时产物（截图、日志、一次性脚本、下载物）一律放 `dspr/`，已在 `.gitignore` 里
-- `.godot/` 是编辑器缓存，不入库
