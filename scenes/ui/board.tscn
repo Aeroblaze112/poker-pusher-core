@@ -1,0 +1,146 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/board.gd" id="1_board"]
+[ext_resource type="Texture2D" path="res://assets/ui/背景.png" id="2_bg"]
+
+[node name="Board" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_board")
+
+[node name="Background" type="TextureRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("2_bg")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Root" type="VBoxContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 4
+
+[node name="TopBar" type="HBoxContainer" parent="Root"]
+
+[node name="RoundLabel" type="Label" parent="Root/TopBar"]
+theme_override_font_sizes/font_size = 15
+text = "回合 1/4"
+
+[node name="PhaseLabel" type="Label" parent="Root/TopBar"]
+theme_override_font_sizes/font_size = 15
+text = "阶段：发牌"
+
+[node name="BackIcon" type="TextureRect" parent="Root/TopBar"]
+custom_minimum_size = Vector2(24, 34)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 4
+
+[node name="JokerTex" type="TextureRect" parent="Root/TopBar"]
+custom_minimum_size = Vector2(24, 34)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 4
+
+[node name="JokerLabel" type="Label" parent="Root/TopBar"]
+theme_override_font_sizes/font_size = 15
+text = "王"
+
+[node name="PilesLabel" type="Label" parent="Root/TopBar"]
+theme_override_font_sizes/font_size = 15
+text = "抽牌堆 0｜弃牌堆1 0｜弃牌堆2 0"
+
+[node name="LogBtn" type="Button" parent="Root/TopBar"]
+layout_mode = 2
+text = "日志"
+
+[node name="D2Btn" type="Button" parent="Root/TopBar"]
+layout_mode = 2
+text = "看弃牌堆2"
+
+[node name="Mid" type="Control" parent="Root"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="OppRing" type="Control" parent="Root/Mid"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TableHolder" type="CenterContainer" parent="Root/Mid"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TableRow" type="HBoxContainer" parent="Root/Mid/TableHolder"]
+layout_mode = 2
+alignment = 1
+
+[node name="MyBuildBox" type="HBoxContainer" parent="Root/Mid"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_top = -138.0
+grow_horizontal = 2
+grow_vertical = 0
+alignment = 1
+
+[node name="Bottom" type="PanelContainer" parent="Root"]
+layout_mode = 2
+
+[node name="BottomRow" type="HBoxContainer" parent="Root/Bottom"]
+
+[node name="Bvb" type="VBoxContainer" parent="Root/Bottom/BottomRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HandFan" type="Control" parent="Root/Bottom/BottomRow/Bvb"]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PromptRow" type="HBoxContainer" parent="Root/Bottom/BottomRow/Bvb"]
+layout_mode = 2
+
+[node name="PromptLabel" type="Label" parent="Root/Bottom/BottomRow/Bvb/PromptRow"]
+theme_override_colors/font_color = Color(0.85, 0.7, 0.32, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.6)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+theme_override_font_sizes/font_size = 17
+
+[node name="ConfirmBtn" type="Button" parent="Root/Bottom/BottomRow/Bvb/PromptRow"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"AccentButton"
+text = "确认"
+
+[node name="RestartBtn" type="Button" parent="Root/Bottom/BottomRow/Bvb/PromptRow"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"AccentButton"
+text = "重新开始"
+
+[node name="ReconnectBtn" type="Button" parent="Root/Bottom/BottomRow/Bvb/PromptRow"]
+visible = false
+layout_mode = 2
+theme_type_variation = &"AccentButton"
+text = "重新连接"

@@ -1,0 +1,19 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/build_strip.gd" id="1_strip"]
+[ext_resource type="Texture2D" path="res://assets/ui/牌位/构筑牌位_常态黄.png" id="2_bg"]
+
+[node name="BuildStrip" type="Control"]
+custom_minimum_size = Vector2(402, 138)
+script = ExtResource("1_strip")
+
+[node name="Background" type="TextureRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("2_bg")
+expand_mode = 1
+stretch_mode = 4

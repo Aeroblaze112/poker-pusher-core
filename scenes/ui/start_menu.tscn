@@ -1,0 +1,213 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/start_menu.gd" id="1_menu"]
+
+[sub_resource type="ButtonGroup" id="ButtonGroup_counts"]
+allow_unpress = false
+
+[node name="StartMenu" type="PanelContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_type_variation = &"Scrim"
+script = ExtResource("1_menu")
+
+[node name="Center" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MenuCard" type="PanelContainer" parent="Center"]
+theme_type_variation = &"Card"
+
+[node name="Margin" type="MarginContainer" parent="Center/MenuCard"]
+theme_override_constants/margin_left = 46
+theme_override_constants/margin_top = 22
+theme_override_constants/margin_right = 46
+theme_override_constants/margin_bottom = 22
+
+[node name="VBox" type="VBoxContainer" parent="Center/MenuCard/Margin"]
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="Center/MenuCard/Margin/VBox"]
+theme_override_colors/font_color = Color(0.85, 0.7, 0.32, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.6)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 34
+text = "我说推扑克特别有说法"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Center/MenuCard/Margin/VBox"]
+theme_override_colors/font_color = Color(0.7, 0.72, 0.66, 1)
+theme_override_font_sizes/font_size = 15
+text = "——四驱兄弟斗不了地主——"
+horizontal_alignment = 1
+
+[node name="AccountForm" type="HBoxContainer" parent="Center/MenuCard/Margin/VBox"]
+alignment = 1
+
+[node name="UserEdit" type="LineEdit" parent="Center/MenuCard/Margin/VBox/AccountForm"]
+custom_minimum_size = Vector2(120, 0)
+placeholder_text = "用户名"
+
+[node name="PwdEdit" type="LineEdit" parent="Center/MenuCard/Margin/VBox/AccountForm"]
+custom_minimum_size = Vector2(120, 0)
+placeholder_text = "密码"
+secret = true
+
+[node name="LoginBtn" type="Button" parent="Center/MenuCard/Margin/VBox/AccountForm"]
+custom_minimum_size = Vector2(64, 32)
+theme_type_variation = &"AccentButton"
+text = "登录"
+
+[node name="RegisterBtn" type="Button" parent="Center/MenuCard/Margin/VBox/AccountForm"]
+custom_minimum_size = Vector2(64, 32)
+text = "注册"
+
+[node name="AccountInfo" type="HBoxContainer" parent="Center/MenuCard/Margin/VBox"]
+visible = false
+alignment = 1
+
+[node name="AccountLabel" type="Label" parent="Center/MenuCard/Margin/VBox/AccountInfo"]
+text = ""
+
+[node name="LogoutBtn" type="Button" parent="Center/MenuCard/Margin/VBox/AccountInfo"]
+custom_minimum_size = Vector2(64, 32)
+text = "登出"
+
+[node name="AccountStatus" type="Label" parent="Center/MenuCard/Margin/VBox"]
+theme_override_colors/font_color = Color(0.95, 0.6, 0.4, 1)
+horizontal_alignment = 1
+
+[node name="Hint" type="Label" parent="Center/MenuCard/Margin/VBox"]
+text = "选择人数与对手难度，开始游戏"
+horizontal_alignment = 1
+
+[node name="CountRow" type="HBoxContainer" parent="Center/MenuCard/Margin/VBox"]
+alignment = 1
+
+[node name="Count2" type="Button" parent="Center/MenuCard/Margin/VBox/CountRow"]
+custom_minimum_size = Vector2(72, 36)
+toggle_mode = true
+button_group = SubResource("ButtonGroup_counts")
+text = "2 人"
+
+[node name="Count4" type="Button" parent="Center/MenuCard/Margin/VBox/CountRow"]
+custom_minimum_size = Vector2(72, 36)
+toggle_mode = true
+button_pressed = true
+button_group = SubResource("ButtonGroup_counts")
+text = "4 人"
+
+[node name="Count5" type="Button" parent="Center/MenuCard/Margin/VBox/CountRow"]
+custom_minimum_size = Vector2(72, 36)
+toggle_mode = true
+button_group = SubResource("ButtonGroup_counts")
+text = "5 人"
+
+[node name="Count6" type="Button" parent="Center/MenuCard/Margin/VBox/CountRow"]
+custom_minimum_size = Vector2(72, 36)
+toggle_mode = true
+button_group = SubResource("ButtonGroup_counts")
+text = "6 人"
+
+[node name="EasyBtn" type="Button" parent="Center/MenuCard/Margin/VBox"]
+custom_minimum_size = Vector2(320, 42)
+theme_override_font_sizes/font_size = 18
+text = "初级"
+
+[node name="NormalBtn" type="Button" parent="Center/MenuCard/Margin/VBox"]
+custom_minimum_size = Vector2(320, 42)
+theme_override_font_sizes/font_size = 18
+text = "高级"
+
+[node name="HardBtn" type="Button" parent="Center/MenuCard/Margin/VBox"]
+custom_minimum_size = Vector2(320, 42)
+theme_override_font_sizes/font_size = 18
+theme_type_variation = &"AccentButton"
+text = "智能择"
+
+[node name="RulesRow" type="HBoxContainer" parent="Center/MenuCard/Margin/VBox"]
+alignment = 1
+
+[node name="RulesBtn" type="Button" parent="Center/MenuCard/Margin/VBox/RulesRow"]
+custom_minimum_size = Vector2(150, 34)
+theme_override_font_sizes/font_size = 15
+text = "玩法说明"
+
+[node name="Separator" type="HSeparator" parent="Center/MenuCard/Margin/VBox"]
+
+[node name="NetLabel" type="Label" parent="Center/MenuCard/Margin/VBox"]
+theme_override_colors/font_color = Color(0.85, 0.7, 0.32, 1)
+text = "联机对战（2-6 人，主机权威）"
+horizontal_alignment = 1
+
+[node name="NameRow" type="HBoxContainer" parent="Center/MenuCard/Margin/VBox"]
+alignment = 1
+
+[node name="NameEdit" type="LineEdit" parent="Center/MenuCard/Margin/VBox/NameRow"]
+custom_minimum_size = Vector2(212, 0)
+placeholder_text = "你的名字（重连凭它入座）"
+
+[node name="AddrRow" type="HBoxContainer" parent="Center/MenuCard/Margin/VBox"]
+alignment = 1
+
+[node name="IpEdit" type="LineEdit" parent="Center/MenuCard/Margin/VBox/AddrRow"]
+custom_minimum_size = Vector2(140, 0)
+text = "127.0.0.1"
+
+[node name="PortEdit" type="LineEdit" parent="Center/MenuCard/Margin/VBox/AddrRow"]
+custom_minimum_size = Vector2(64, 0)
+text = "8910"
+
+[node name="ButtonRow" type="HBoxContainer" parent="Center/MenuCard/Margin/VBox"]
+alignment = 1
+
+[node name="HostBtn" type="Button" parent="Center/MenuCard/Margin/VBox/ButtonRow"]
+custom_minimum_size = Vector2(140, 36)
+theme_type_variation = &"AccentButton"
+text = "创建主机"
+
+[node name="JoinBtn" type="Button" parent="Center/MenuCard/Margin/VBox/ButtonRow"]
+custom_minimum_size = Vector2(140, 36)
+text = "加入主机"
+
+[node name="LobbyCard" type="PanelContainer" parent="Center"]
+visible = false
+theme_type_variation = &"Card"
+
+[node name="Margin" type="MarginContainer" parent="Center/LobbyCard"]
+theme_override_constants/margin_left = 46
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 46
+theme_override_constants/margin_bottom = 30
+
+[node name="VBox" type="VBoxContainer" parent="Center/LobbyCard/Margin"]
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="Title" type="Label" parent="Center/LobbyCard/Margin/VBox"]
+theme_override_colors/font_color = Color(0.85, 0.7, 0.32, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.6)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 28
+text = "联机大厅"
+horizontal_alignment = 1
+
+[node name="PlayerList" type="Label" parent="Center/LobbyCard/Margin/VBox"]
+horizontal_alignment = 1
+
+[node name="LobbyStatus" type="Label" parent="Center/LobbyCard/Margin/VBox"]
+theme_override_colors/font_color = Color(0.85, 0.7, 0.32, 1)
+horizontal_alignment = 1
+
+[node name="StartNetBtn" type="Button" parent="Center/LobbyCard/Margin/VBox"]
+custom_minimum_size = Vector2(240, 44)
+theme_type_variation = &"AccentButton"
+text = "开始联机"

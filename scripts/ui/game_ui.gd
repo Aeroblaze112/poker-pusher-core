@@ -18,7 +18,11 @@ signal logout_requested
 
 var game  # 主控制器（场景根 Control 节点），动态访问其状态字段
 var player_count := 4     # 本局人数（构建布局前由控制器写入）
-var selected_count := 4   # 开局界面当前选中的人数
+
+## 开局界面当前选中的人数（住在菜单场景里）
+var selected_count: int:
+	get:
+		return _menu.selected_count if is_instance_valid(_menu) else 4
 
 # ---- 控件引用 ----
 var round_label: Label
@@ -39,31 +43,18 @@ var rules_popup: PanelContainer    # 玩法说明页（首页入口打开，懒�
 var confirm_btn: Button
 var restart_btn: Button
 
-var _menu_box: Control           # 开局菜单卡（单机 + 联机入口）
-var _lobby_card: PanelContainer  # 联机大厅卡
-var _lobby_box: VBoxContainer    # 联机大厅内容
-var _lobby_list: Label
-var _lobby_status: Label
-var _start_net_btn: Button
-var _ip_edit: LineEdit
-var _port_edit: LineEdit
-var _name_edit: LineEdit
+var _menu                 # 开局菜单场景实例
 var _reconnect_btn: Button
-var _acct_form: HBoxContainer    # 账户：登录/注册表单
-var _acct_info: HBoxContainer    # 账户：已登录信息行
-var _acct_label: Label
-var _acct_status: Label
-var _acct_user: LineEdit
-var _acct_pwd: LineEdit
 
-var _wrap_top: HBoxContainer   # 桌面上沿对手区
-var _wrap_left: Control        # 左侧对手区
-var _wrap_right: Control       # 右侧对手区
+var _ring: Control             # 对手构筑框的环形区域
+var _ring_center := Vector2.ZERO
+var _ring_radii := Vector2.ZERO
+var _strip_labels := {}        # idx -> 名字/总分标签（贴在各人构筑框外侧）
+var _own_box: HBoxContainer    # 自己那条构筑框的落位容器
 var _score_row_boxes: Array = []
 
 var _tex_cache := {}
-var _rotated: Array = []        # 旋转控件 [{c, wrap, rot, fixed}]
-var _strips: Array = []         # 构筑框 [{idx, holder, scale}]
+var _strips: Array = []         # 构筑框 [{idx, holder, pos, rot}]
 var _score_rows: Array = []     # 记分板 [[name_label, score_label]]
 
 
@@ -167,155 +158,39 @@ func style_title(l: Label, size: int, color := C_GOLD) -> void:
 
 # ============================== 构建 ==============================
 func build() -> void:
-	# 背景绒布
-	var bg := TextureRect.new()
-	bg.texture = load_tex("res://assets/ui/背景.png")
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	game.add_child(bg)
-	var root := VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 4)
-	game.add_child(root)
+	var board = (load("res://scenes/ui/board.tscn") as PackedScene).instantiate()
+	game.add_child(board)
+	board.bottom_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())  # 底栏不要黑框，手牌直接摆在桌布上
 
-	# 顶栏
-	var top := HBoxContainer.new()
-	round_label = Label.new()
-	phase_label = Label.new()
-	back_icon = TextureRect.new()
-	back_icon.texture = load_tex("res://assets/ui/牌面/牌背.png")
-	back_icon.custom_minimum_size = Vector2(24, 34)
-	back_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	back_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-	joker_tex = TextureRect.new()
-	joker_tex.custom_minimum_size = Vector2(24, 34)
-	joker_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	joker_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-	joker_label = Label.new()
-	piles_label = Label.new()
-	var log_btn := Button.new()
-	log_btn.text = "日志"
-	log_btn.pressed.connect(toggle_log)
-	var d2_btn := Button.new()
-	d2_btn.text = "看弃牌堆2"
-	d2_btn.pressed.connect(show_d2)
-	for l in [round_label, phase_label, back_icon, joker_tex, joker_label, piles_label, log_btn, d2_btn]:
-		if l is Label:
-			l.add_theme_font_size_override("font_size", 15)
-			l.add_theme_color_override("font_color", C_IVORY)
-		elif l is Button:
-			style_button(l)
-		top.add_child(l)
-	root.add_child(top)
+	# 场景里的控件挂到同名成员上，下面所有刷新逻辑照旧用这些字段
+	round_label = board.round_label
+	phase_label = board.phase_label
+	joker_label = board.joker_label
+	piles_label = board.piles_label
+	prompt_label = board.prompt_label
+	joker_tex = board.joker_tex
+	back_icon = board.back_icon
+	table_row = board.table_row
+	hand_fan = board.hand_fan
+	confirm_btn = board.confirm_btn
+	restart_btn = board.restart_btn
+	_reconnect_btn = board.reconnect_btn
+	_ring = board.opp_ring
+	_own_box = board.my_build_box
 
-	# 中部：四人围桌（上/左/右构筑框，下方人类），中间牌桌
-	var mid := HBoxContainer.new()
-	mid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_child(mid)
+	board.log_pressed.connect(toggle_log)
+	board.d2_pressed.connect(show_d2)
+	board.confirm_pressed.connect(func() -> void: confirm_pressed.emit())
+	board.restart_pressed.connect(func() -> void: restart_requested.emit())
+	board.reconnect_pressed.connect(func() -> void: reconnect_requested.emit())
 
-	# 左边玩家构筑框（旋转 90°，顶部朝向牌桌，垂直居中）
-	var left := Control.new()
-	left.custom_minimum_size = Vector2(150, 0)
-	left.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	mid.add_child(left)
-	_wrap_left = left
-
-	var center := VBoxContainer.new()
-	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mid.add_child(center)
-
-	# 对家的构筑框（摆在桌上）
-	var opp1_strip_box := HBoxContainer.new()
-	opp1_strip_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	center.add_child(opp1_strip_box)
-	_wrap_top = opp1_strip_box
-
-	# 右边玩家构筑框（旋转 -90°，顶部朝向牌桌，垂直居中）
-	var right := Control.new()
-	right.custom_minimum_size = Vector2(150, 0)
-	right.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	mid.add_child(right)
-	_wrap_right = right
-
-	# 桌子区域（效果牌）
-	table_row = HBoxContainer.new()
-	table_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	table_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	center.add_child(table_row)
-
-	# 对手构筑框（可随人数重建）
+	# 对手构筑框随人数重建，你的构筑框固定摆在牌桌下沿
 	build_strips()
-
-	# 你的构筑框（居中摆在牌桌下沿）
-	var my_build_box := HBoxContainer.new()
-	my_build_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	center.add_child(my_build_box)
-	_make_build_strip(0, 1.0, 0.0, my_build_box)
-
-	# 底栏：记分板（左）+ 人类玩家手牌/操作
-	var bottom := PanelContainer.new()
-	style_panel(bottom, 0)  # 底栏通长，不圆角
-	var bottom_row := HBoxContainer.new()
-	bottom.add_child(bottom_row)
-	# 记分板：四家名字 + 总分，独立左对齐
-	var sb := VBoxContainer.new()
-	sb.custom_minimum_size = Vector2(130, 0)
-	sb.add_theme_constant_override("separation", 2)
-	for i in 6:  # 建满 6 行，刷新时按实际人数显隐
-		var row := HBoxContainer.new()
-		var name_l := Label.new()
-		name_l.add_theme_font_size_override("font_size", 13)
-		name_l.add_theme_color_override("font_color", C_IVORY)
-		var score_l := Label.new()
-		score_l.add_theme_font_size_override("font_size", 13)
-		score_l.add_theme_color_override("font_color", C_GOLD)
-		row.add_child(name_l)
-		row.add_child(score_l)
-		sb.add_child(row)
-		_score_rows.append([name_l, score_l])
-		_score_row_boxes.append(row)
-	bottom_row.add_child(sb)
-	var bvb := VBoxContainer.new()
-	bvb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hand_fan = Control.new()
-	hand_fan.custom_minimum_size = Vector2(0, 150)
-	hand_fan.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bvb.add_child(hand_fan)
-	var brow := HBoxContainer.new()
-	prompt_label = Label.new()
-	prompt_label.add_theme_color_override("font_color", C_GOLD)
-	prompt_label.add_theme_font_size_override("font_size", 17)
-	prompt_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
-	prompt_label.add_theme_constant_override("shadow_offset_x", 1)
-	prompt_label.add_theme_constant_override("shadow_offset_y", 1)
-	brow.add_child(prompt_label)
-	confirm_btn = Button.new()
-	confirm_btn.text = "确认"
-	confirm_btn.visible = false
-	style_button(confirm_btn, true)
-	confirm_btn.pressed.connect(func() -> void: confirm_pressed.emit())
-	brow.add_child(confirm_btn)
-	restart_btn = Button.new()
-	restart_btn.text = "重新开始"
-	restart_btn.visible = false
-	style_button(restart_btn, true)
-	restart_btn.pressed.connect(func() -> void: restart_requested.emit())
-	brow.add_child(restart_btn)
-	_reconnect_btn = Button.new()
-	_reconnect_btn.text = "重新连接"
-	_reconnect_btn.visible = false
-	style_button(_reconnect_btn, true)
-	_reconnect_btn.pressed.connect(func() -> void: reconnect_requested.emit())
-	brow.add_child(_reconnect_btn)
-	bvb.add_child(brow)
-	bottom_row.add_child(bvb)  # PanelContainer 只能有一个子节点，bvb 必须挂进 bottom_row
-	root.add_child(bottom)
+	_make_build_strip(0, 1.0)
 
 	_build_log_popup()
 	_build_d2_popup()
-	_build_start_overlay()
+	_build_start_menu()
 
 
 func _build_log_popup() -> void:
@@ -372,172 +247,34 @@ func _build_d2_popup() -> void:
 	game.add_child(d2_popup)
 
 
-## 开局难度选择遮罩层：压场暗罩 + 居中鎏金菜单卡
-func _build_start_overlay() -> void:
-	var overlay := PanelContainer.new()
-	overlay.name = "StartOverlay"
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	var scrim := StyleBoxFlat.new()
-	scrim.bg_color = Color(0.01, 0.03, 0.02, 0.72)
-	overlay.add_theme_stylebox_override("panel", scrim)
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.add_child(center)
-	var card := PanelContainer.new()
-	style_panel(card, 18)
-	center.add_child(card)
-	var margin := MarginContainer.new()
-	for side in ["margin_left", "margin_right"]:
-		margin.add_theme_constant_override(side, 46)
-	for side in ["margin_top", "margin_bottom"]:
-		margin.add_theme_constant_override(side, 22)
-	card.add_child(margin)
-	var ov_vb := VBoxContainer.new()
-	ov_vb.add_theme_constant_override("separation", 10)
-	margin.add_child(ov_vb)
-	var title := Label.new()
-	title.text = "我说推扑克特别有说法"
-	style_title(title, 34)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ov_vb.add_child(title)
-	var subtitle := Label.new()
-	subtitle.text = "——四驱兄弟斗不了地主——"
-	subtitle.add_theme_font_size_override("font_size", 15)
-	subtitle.add_theme_color_override("font_color", C_MUTED)
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ov_vb.add_child(subtitle)
-	_build_account_section(ov_vb)
-	var hint := Label.new()
-	hint.text = "选择人数与对手难度，开始游戏"
-	hint.add_theme_color_override("font_color", C_IVORY)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ov_vb.add_child(hint)
-	# 人数选择（默认 4 人）
-	var count_row := HBoxContainer.new()
-	count_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	var count_btns: Array = []
-	for n in [2, 4, 5, 6]:
-		var cb := Button.new()
-		cb.text = "%d 人" % n
-		cb.toggle_mode = true
-		cb.button_pressed = (n == selected_count)
-		cb.custom_minimum_size = Vector2(72, 36)
-		style_button(cb)
-		var cnt: int = n
-		cb.pressed.connect(func() -> void:
-			selected_count = cnt
-			for other in count_btns:
-				other.button_pressed = (other == cb))
-		count_btns.append(cb)
-		count_row.add_child(cb)
-	ov_vb.add_child(count_row)
-	var btn_defs := [
-		["easy", "初级"],
-		["normal", "高级"],
-		["hard", "智能择"],
-	]
-	for d in btn_defs:
-		var b := Button.new()
-		b.text = d[1]
-		b.custom_minimum_size = Vector2(320, 42)
-		b.add_theme_font_size_override("font_size", 18)
-		style_button(b, d[0] == "hard")  # 智能择为主推，给主行动色
-		var key: String = d[0]
-		b.pressed.connect(func() -> void: difficulty_chosen.emit(key))
-		ov_vb.add_child(b)
-	# 玩法说明入口（只读页面，不打断开局流程）
-	var rules_row := HBoxContainer.new()
-	rules_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	var rules_btn := Button.new()
-	rules_btn.text = "玩法说明"
-	rules_btn.custom_minimum_size = Vector2(150, 34)
-	rules_btn.add_theme_font_size_override("font_size", 15)
-	style_button(rules_btn)
-	rules_btn.pressed.connect(show_rules)
-	rules_row.add_child(rules_btn)
-	ov_vb.add_child(rules_row)
-	_menu_box = card
-	_build_net_section(ov_vb)
-	_build_lobby(center)
-	game.add_child(overlay)
+## 开局菜单：画面在 start_menu.tscn 里，这里只实例化 + 把信号转给控制器
+func _build_start_menu() -> void:
+	_menu = (load("res://scenes/ui/start_menu.tscn") as PackedScene).instantiate()
+	game.add_child(_menu)
+	_menu.difficulty_chosen.connect(difficulty_chosen.emit)
+	_menu.login_requested.connect(login_requested.emit)
+	_menu.register_requested.connect(register_requested.emit)
+	_menu.logout_requested.connect(logout_requested.emit)
+	_menu.host_requested.connect(host_requested.emit)
+	_menu.join_requested.connect(join_requested.emit)
+	_menu.start_net_requested.connect(start_net_requested.emit)
+	_menu.rules_requested.connect(show_rules)
 
 
-# ============================== 账户区 ==============================
-func _build_account_section(ov_vb: VBoxContainer) -> void:
-	# 未登录：表单（用户名 + 密码 + 登录/注册）
-	_acct_form = HBoxContainer.new()
-	_acct_form.alignment = BoxContainer.ALIGNMENT_CENTER
-	_acct_user = LineEdit.new()
-	_acct_user.placeholder_text = "用户名"
-	_acct_user.custom_minimum_size = Vector2(120, 0)
-	style_input(_acct_user)
-	_acct_pwd = LineEdit.new()
-	_acct_pwd.placeholder_text = "密码"
-	_acct_pwd.secret = true
-	_acct_pwd.custom_minimum_size = Vector2(120, 0)
-	style_input(_acct_pwd)
-	var login_btn := Button.new()
-	login_btn.text = "登录"
-	login_btn.custom_minimum_size = Vector2(64, 32)
-	style_button(login_btn, true)
-	login_btn.pressed.connect(func() -> void:
-		login_requested.emit(_acct_user.text.strip_edges(), _acct_pwd.text))
-	var reg_btn := Button.new()
-	reg_btn.text = "注册"
-	reg_btn.custom_minimum_size = Vector2(64, 32)
-	style_button(reg_btn)
-	reg_btn.pressed.connect(func() -> void:
-		register_requested.emit(_acct_user.text.strip_edges(), _acct_pwd.text))
-	_acct_form.add_child(_acct_user)
-	_acct_form.add_child(_acct_pwd)
-	_acct_form.add_child(login_btn)
-	_acct_form.add_child(reg_btn)
-	ov_vb.add_child(_acct_form)
-	# 已登录：信息行（名字 + 战绩 + 登出）
-	_acct_info = HBoxContainer.new()
-	_acct_info.alignment = BoxContainer.ALIGNMENT_CENTER
-	_acct_info.visible = false
-	_acct_label = Label.new()
-	_acct_label.add_theme_color_override("font_color", C_IVORY)
-	_acct_info.add_child(_acct_label)
-	var logout_btn := Button.new()
-	logout_btn.text = "登出"
-	logout_btn.custom_minimum_size = Vector2(64, 32)
-	style_button(logout_btn)
-	logout_btn.pressed.connect(func() -> void: logout_requested.emit())
-	_acct_info.add_child(logout_btn)
-	ov_vb.add_child(_acct_info)
-	_acct_status = Label.new()
-	_acct_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_acct_status.add_theme_color_override("font_color", Color(0.95, 0.6, 0.4))
-	ov_vb.add_child(_acct_status)
-
-
-## 登录状态切换：pname 为空 = 回到游客表单；非空 = 显示战绩并把联机名锁定为账号名
+## 账户状态、联机大厅这些都住在菜单场景里，这里只做转发
 func set_account(pname: String, stats: Dictionary) -> void:
-	if not is_instance_valid(_acct_form):
-		return
-	var logged := pname != ""
-	_acct_form.visible = not logged
-	_acct_info.visible = logged
-	if logged:
-		_acct_label.text = "👤 %s ｜ %d 场 %d 胜 ｜ 最佳 %d 分" % [
-			pname, int(stats.get("games", 0)), int(stats.get("wins", 0)), int(stats.get("best", 0))]
-		set_default_name(pname)
-		if is_instance_valid(_name_edit):
-			_name_edit.editable = false
-	elif is_instance_valid(_name_edit):
-		_name_edit.editable = true
-	set_account_status("")
+	if is_instance_valid(_menu):
+		_menu.set_account(pname, stats)
 
 
 func set_account_status(t: String) -> void:
-	if is_instance_valid(_acct_status):
-		_acct_status.text = t
+	if is_instance_valid(_menu):
+		_menu.set_account_status(t)
 
 
 # ============================== 构筑框 ==============================
-## 对手构筑框：先排桌面上沿，人手多于 4 时左右两侧各加一个（旋转 90°）
+## 对手构筑框：围着牌桌排一圈，180° 在左、270° 在上、360° 在右。
+## 人越少铺得越开，人越多越往两侧压；越靠上（离自己越远）整体越小。
 func build_strips() -> void:
 	# 只重建对手框：主视角框（idx 0，在 build() 里单独创建）不能一起销毁
 	for i in range(_strips.size() - 1, -1, -1):
@@ -547,15 +284,67 @@ func build_strips() -> void:
 		e.holder.get_parent().remove_child(e.holder)
 		e.holder.queue_free()
 		_strips.remove_at(i)
-	_rotated.clear()
+		if _strip_labels.has(e.idx):
+			var lab: Label = _strip_labels[e.idx]
+			lab.get_parent().remove_child(lab)
+			lab.queue_free()
+			_strip_labels.erase(e.idx)
 	var opponents := player_count - 1
-	# 3 人局（对手 2）没有左右余量，两个都排上沿；4 人以上才分左右两侧
-	var top_n: int = opponents if opponents <= 2 else opponents - 2
-	for i in top_n:
-		_make_build_strip(1 + i, 0.55, 0.0, _wrap_top)
-	if opponents >= 3:
-		_make_build_strip(1 + top_n, 0.55, PI / 2, _wrap_left)
-		_make_build_strip(2 + top_n, 0.55, -PI / 2, _wrap_right)
+	if opponents <= 0:
+		return
+	var area := _ring.size
+	if area.x < 10.0:  # 场景还没布局完成时按设计尺寸算
+		area = Vector2(1280, 486)
+	_ring_center = area * 0.5
+	_ring_radii = area * 0.5
+	# 每个模式一套摆位，不共用公式：桌子形状不一样，位置就该各写各的
+	var seats: Array
+	match player_count:
+		2: seats = _seats_for_two()
+		5: seats = _seats_for_five()
+		6: seats = _seats_for_six()
+		_: seats = _seats_for_four()
+	for i in seats.size():
+		var s: Array = seats[i]
+		_make_build_strip(1 + i, s[2], s[0], s[1])
+
+
+## 每个座位：[落点, 旋转弧度, 缩放]，坐标按 1280×486 的牌桌区手摆
+## 2 人：对手正对面
+func _seats_for_two() -> Array:
+	return [
+		[Vector2(640, 140), 0.0, 0.96],
+	]
+
+
+## 4 人：对面 + 左右两侧侧坐
+func _seats_for_four() -> Array:
+	return [
+		[Vector2(126, 272), PI / 2.0, 0.84],
+		[Vector2(640, 64), 0.0, 0.90],
+		[Vector2(1154, 272), -PI / 2.0, 0.84],
+	]
+
+
+## 5 人：对面空着，四个对手压在两侧
+func _seats_for_five() -> Array:
+	return [
+		[Vector2(146, 300), PI / 2.0, 0.78],
+		[Vector2(372, 158), -PI / 6.0, 0.62],
+		[Vector2(908, 158), PI / 6.0, 0.62],
+		[Vector2(1134, 300), -PI / 2.0, 0.78],
+	]
+
+
+## 6 人：六边形，自己在底边中点，五个对手占另外五个角
+func _seats_for_six() -> Array:
+	return [
+		[Vector2(197, 408), -PI / 6.0, 0.66],
+		[Vector2(197, 194), PI / 6.0, 0.66],
+		[Vector2(640, 88), 0.0, 0.66],
+		[Vector2(1083, 194), -PI / 6.0, 0.66],
+		[Vector2(1083, 408), PI / 6.0, 0.66],
+	]
 
 
 ## 人数变化时重建对手构筑框（联机开局 / 单机选人数）
@@ -567,38 +356,25 @@ func set_player_count(n: int) -> void:
 	refresh_build_strips()
 
 
-## 构筑框：常态黄牌位条底图 + 牌严格落在槽内，空槽盖牌背；rot != 0 时旋转
-func _make_build_strip(idx: int, scale: float, rot: float, wrapper: Control) -> Control:
-	var holder := Control.new()
-	holder.custom_minimum_size = Vector2(402, 138) * scale
-	var strip := TextureRect.new()
-	strip.texture = load_tex("res://assets/ui/牌位/构筑牌位_常态黄.png")
-	strip.set_anchors_preset(Control.PRESET_FULL_RECT)
-	strip.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	strip.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	holder.add_child(strip)
-	wrapper.add_child(holder)
-	if rot != 0.0:
-		holder.rotation = rot
-		_rotated.append({c = holder, wrap = wrapper, rot = rot, fixed = Vector2(402, 138) * scale})
-	_strips.append({idx = idx, holder = holder, scale = scale})
+## 构筑框：场景实例。给了 pos 就走环形摆位，不给就交给容器（主视角那条）
+func _make_build_strip(idx: int, s: float, pos := Vector2.INF, rot := 0.0) -> Control:
+	var holder: Control = (load("res://scenes/ui/build_strip.tscn") as PackedScene).instantiate()
+	holder.setup(idx, s)
+	_strips.append({idx = idx, holder = holder, pos = pos, rot = rot, s = s})
+	if pos == Vector2.INF:
+		_own_box.add_child(holder)
+	else:
+		_ring.add_child(holder)
+		_place_ring(holder, pos, rot)
 	return holder
 
 
-func _strip_card(tex: Texture2D, pos: Vector2, s: float, hoverable := false) -> TextureRect:
-	var t := TextureRect.new()
-	# 必须先设 expand_mode 再贴纹理：否则纹理原始尺寸（200×280）会把后面设置的 size 顶回去
-	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-	t.texture = tex
-	t.position = pos
-	t.size = Vector2(74, 103) * s
-	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if hoverable:
-		t.pivot_offset = t.size / 2
-		_add_hover(t)
-	return t
+## 环形摆位：枢轴放中心，转完中心正好落在 pos
+func _place_ring(holder: Control, pos: Vector2, rot: float) -> void:
+	var size := holder.custom_minimum_size
+	holder.pivot_offset = size * 0.5
+	holder.rotation = rot
+	holder.position = pos - size * 0.5
 
 
 func _mini_card_tex(c: PCard) -> TextureRect:
@@ -628,68 +404,198 @@ func _add_hover(c: Control, max_scale := 1.18) -> void:
 func refresh_build_strips() -> void:
 	if game.SIM or game.players.is_empty():
 		return
-	# 实测牌位图：黄槽内框 x 13..94（间距 98）、y 12..125；74 宽牌在槽内居中应放 16.5/114.5/212.5/310.5
-	const SLOT_X := [16.5, 114.5, 212.5, 310.5]
 	for e in _strips:
-		var holder: Control = e.holder
-		holder.visible = e.idx < game.players.size()
-		if not holder.visible:
+		var strip: Control = e.holder
+		var idx: int = e.idx
+		strip.refresh(game.players[idx] if idx < game.players.size() else null)
+		if e.pos != Vector2.INF:  # 尺寸变了要重新摆位，转轴才对得上
+			_place_ring(strip, e.pos, e.rot)
+	_layout_strip_labels()
+
+
+## 每人一块分板：名字 + 总分贴在各自构筑框的外侧，不跟着框旋转
+func _strip_label(idx: int) -> Label:
+	if _strip_labels.has(idx):
+		return _strip_labels[idx]
+	var l := Label.new()
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.add_theme_font_size_override("font_size", 13)
+	l.add_theme_color_override("font_color", C_IVORY)
+	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
+	l.add_theme_constant_override("shadow_offset_y", 1)
+	l.z_index = 20
+	_ring.add_child(l)
+	_strip_labels[idx] = l
+	return l
+
+
+func _layout_strip_labels() -> void:
+	var ring_rect := Rect2(Vector2.ZERO, _ring.size)
+	for e in _strips:
+		var idx: int = e.idx
+		var lab := _strip_label(idx)
+		var p: PPlayer = game.players[idx] if idx < game.players.size() else null
+		if p == null:
+			lab.visible = false
 			continue
-		var p: PPlayer = game.players[e.idx]
-		var s: float = e.scale
-		var hoverable: bool = e.idx != 0  # 主视角（你的）构筑牌不放大
-		# 清空底图以外的子节点
-		while holder.get_child_count() > 1:
-			var ch: Node = holder.get_child(1)
-			holder.remove_child(ch)
-			ch.queue_free()
-		# 4 个黄槽：固定牌 → 临时填牌 → 空槽盖牌背
-		var fixed_n: int = p.build.size()
-		var on_yellow: int = mini(p.temp_fill.size(), 4 - fixed_n)
-		for i in 4:
-			var tex: Texture2D
-			if i < fixed_n:
-				tex = card_tex(p.build[i])
-			elif i < fixed_n + on_yellow:
-				tex = card_tex(p.temp_fill[i - fixed_n])
-			else:
-				tex = load_tex("res://assets/ui/牌面/牌背.png")
-			holder.add_child(_strip_card(tex, Vector2(SLOT_X[i], 17) * s, s, hoverable and (i < fixed_n + on_yellow)))
-		# 蓝槽 = 杠给的临时牌位，排在黄条右侧，空着不盖牌
-		for bi in p.temp_slots:
-			var slot := TextureRect.new()
-			slot.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			slot.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-			slot.texture = load_tex("res://assets/ui/牌位/构筑牌位_临时蓝.png")
-			slot.position = Vector2(410 + bi * 116, 0) * s
-			slot.size = Vector2(108, 138) * s
-			slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			holder.add_child(slot)
-			var fill_idx: int = on_yellow + bi
-			if fill_idx < p.temp_fill.size():
-				holder.add_child(_strip_card(card_tex(p.temp_fill[fill_idx]), Vector2(410 + bi * 116 + 17, 17) * s, s, hoverable))
-		if p.dropped:  # 掉线标记：构筑框左上角
-			var tag := Label.new()
-			tag.text = "离线"
-			tag.add_theme_color_override("font_color", Color(1.0, 0.45, 0.35))
-			tag.add_theme_font_size_override("font_size", maxi(int(20 * s), 10))
-			tag.position = Vector2(4, -4) * s
-			holder.add_child(tag)
-		holder.custom_minimum_size = Vector2(402, 138) * s
-	_relayout_rotated()
+		lab.visible = true
+		lab.text = "%s%s%s  %d" % [p.pname,
+			" ［离线］" if p.dropped else "",
+			" ［终局］" if p.j_emptied else "", p.score]
+		lab.add_theme_color_override("font_color", C_GOLD if idx == 0 else C_IVORY)
+		var holder: Control = e.holder
+		var mid: Vector2
+		if e.pos != Vector2.INF:
+			mid = e.pos  # 环形里 pos 就是绕中心转过的落点，旋转过的框拿不到可靠的中心
+		else:
+			mid = holder.get_global_rect().get_center() - _ring.get_global_rect().position
+		var dir := Vector2.UP
+		var gap := 24.0
+		var dist := 0.0
+		if e.pos != Vector2.INF:
+			# 两侧的人把分板放在靠桌心的一侧，对面的放在框上方
+			var dxn: float = (float(e.pos.x) - _ring_center.x) / maxf(_ring_radii.x, 1.0)
+			var dyn: float = (float(e.pos.y) - _ring_center.y) / maxf(_ring_radii.y, 1.0)
+			if absf(dxn) > absf(dyn):
+				dir = Vector2(-signf(dxn), 0.0)
+			var half: Vector2 = holder.custom_minimum_size * 0.5
+			dist = absf(cos(e.rot)) * half.x + absf(sin(e.rot)) * half.y
+		else:
+			dist = holder.custom_minimum_size.y * 0.5
+			gap = 22.0
+		lab.size = Vector2.ZERO
+		lab.reset_size()
+		var want: Vector2 = mid + dir * (dist + gap) - lab.size * 0.5
+		want.x = clampf(want.x, 8.0, ring_rect.size.x - lab.size.x - 8.0)
+		want.y = clampf(want.y, 3.0, ring_rect.size.y - lab.size.y - 3.0)
+		lab.position = want
 
 
-## 旋转控件重排：尺寸变化后重新居中
-func _relayout_rotated() -> void:
-	for r in _rotated:
-		var c: Control = r.c
-		var wrap: Control = r.wrap
-		var s: Vector2 = r.fixed
-		if s == Vector2.ZERO:
-			s = c.get_combined_minimum_size()
-		c.size = s
-		c.pivot_offset = s / 2
-		c.position = (wrap.size - s) / 2
+## 分数跳动：结算加分时给某人那块分板一个放大回弹
+func bump_score(idx: int) -> void:
+	var lab := _strip_label(idx)
+	lab.pivot_offset = lab.size * 0.5
+	var tw := lab.create_tween()
+	tw.tween_property(lab, "scale", Vector2(1.35, 1.35), 0.12).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(lab, "scale", Vector2.ONE, 0.22)
+
+
+func _strip_label_center(idx: int) -> Vector2:
+	var lab := _strip_label(idx)
+	return lab.get_global_rect().get_center() - game.get_global_rect().position
+
+
+## 浮动文字：+N 之类，挂在根控件上，用完自己销毁
+func _float_text(txt: String, at: Vector2, color: Color, size := 30) -> Label:
+	var l := Label.new()
+	l.text = txt
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_color_override("font_color", color)
+	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.75))
+	l.add_theme_constant_override("shadow_offset_x", 1)
+	l.add_theme_constant_override("shadow_offset_y", 2)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.z_index = 120
+	l.modulate.a = 0.0
+	game.add_child(l)
+	l.reset_size()
+	l.pivot_offset = l.size * 0.5
+	l.position = at - l.size * 0.5
+	return l
+
+
+## 圆弧位移：二次贝塞尔，用于 325 的影子从一个人飞到另一个人
+func _arc(node: Control, from: Vector2, to: Vector2, lift: float, dur: float) -> void:
+	var mid := (from + to) * 0.5 + Vector2(0, -lift)
+	var tw: Tween = game.create_tween()
+	tw.tween_method(func(t: float) -> void:
+		var p: Vector2 = from.lerp(mid, t).lerp(mid.lerp(to, t), t)
+		node.position = p - node.size * 0.5, 0.0, 1.0, dur)
+	await tw.finished
+
+
+## 固定牌落位：自己金边一闪，对手只是轻微高亮一下
+func anim_fix(idx: int) -> void:
+	if game.SIM or game.AUTO:
+		return
+	var s := strip_of(idx)
+	if s == null or not s.has_method("pop"):
+		return
+	if idx == 0:
+		s.flash()
+		s.pop()
+	else:
+		s.hint_glow()
+	await game.get_tree().create_timer(0.18).timeout
+
+
+## 结算：构筑组逐张亮起 → 同时点亮
+func anim_settle(idx: int) -> void:
+	if game.SIM or game.AUTO:
+		return
+	var s := strip_of(idx)
+	if s == null or not s.has_method("reveal"):
+		return
+	await s.reveal()
+
+
+## 全场一起亮：四家的构筑组同时逐张亮起，别一家一家等着播
+func anim_settle_all(idxs: Array) -> void:
+	if game.SIM or game.AUTO:
+		return
+	for idx in idxs:
+		var s := strip_of(idx)
+		if s != null and s.has_method("reveal"):
+			s.reveal()   # 不 await：并行播放
+	await game.get_tree().create_timer(0.42).timeout
+
+
+## 加分：+N 从构筑框浮出，飞进自己的分板，分板数字跳一下
+func anim_score_gain(idx: int, pts: int, color := C_GOLD) -> void:
+	if game.SIM or game.AUTO:
+		return
+	var s := strip_of(idx)
+	if s == null:
+		return
+	var at := center_of(s) + Vector2(0, -14)
+	var lab := _float_text("+%d" % pts, at, color, 30)
+	var up := at + Vector2(0, -52)
+	var tw: Tween = game.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(lab, "position", up - lab.size * 0.5, 0.20).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(lab, "modulate:a", 1.0, 0.12)
+	await tw.finished
+	await game.get_tree().create_timer(0.06).timeout
+	var target := _strip_label_center(idx)
+	var tw2: Tween = game.create_tween()
+	tw2.set_parallel(true)
+	tw2.tween_property(lab, "position", target - lab.size * 0.5, 0.26).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw2.tween_property(lab, "scale", Vector2(0.45, 0.45), 0.26)
+	tw2.tween_property(lab, "modulate:a", 0.0, 0.26)
+	await tw2.finished
+	lab.queue_free()
+	bump_score(idx)
+
+
+## 3-2-5 翻盘：把全场最高分那次 +N 复制成半透明影子，弧线飞给触发者
+func anim_325(from_idx: int, to_idx: int, pts: int) -> void:
+	if game.SIM or game.AUTO:
+		return
+	var from_c := _strip_label_center(from_idx)
+	var to_c := center_of(strip_of(to_idx)) + Vector2(0, -14)
+	var shadow := _float_text("+%d" % pts, from_c, Color(0.92, 0.96, 0.80), 28)
+	shadow.modulate.a = 0.0
+	var tw: Tween = game.create_tween()
+	tw.tween_property(shadow, "modulate:a", 0.7, 0.12)
+	await tw.finished
+	await _arc(shadow, from_c, to_c, 110.0, 0.42)
+	shadow.queue_free()
+	var s := strip_of(to_idx)
+	if s != null and s.has_method("flash"):
+		s.flash(Color(1.0, 0.92, 0.55))
+		s.pop(1.06)
+	bump_score(to_idx)
+	await game.get_tree().create_timer(0.22).timeout
 
 
 func strip_of(idx: int) -> Control:
@@ -715,120 +621,18 @@ func show_d2() -> void:
 
 
 # ============================== 玩法说明 ==============================
-## 首页「玩法说明」入口：只读页面，首次点击时才构建
+## 首页「玩法说明」入口：首次点击时实例化场景，之后复用同一个页面
 func show_rules() -> void:
-	if rules_popup == null or not is_instance_valid(rules_popup):
-		_build_rules_page()
-	rules_popup.show()
-	rules_popup.move_to_front()
+	_rules_page().open()
 
 
-func _build_rules_page() -> void:
-	var overlay := PanelContainer.new()
-	overlay.name = "RulesOverlay"
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	var scrim := StyleBoxFlat.new()
-	scrim.bg_color = Color(0.01, 0.03, 0.02, 0.86)
-	overlay.add_theme_stylebox_override("panel", scrim)
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.add_child(center)
-	var card := PanelContainer.new()
-	style_panel(card, 18)
-	center.add_child(card)
-	var margin := MarginContainer.new()
-	for side in ["margin_left", "margin_right"]:
-		margin.add_theme_constant_override(side, 28)
-	for side in ["margin_top", "margin_bottom"]:
-		margin.add_theme_constant_override(side, 16)
-	card.add_child(margin)
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 8)
-	margin.add_child(vb)
-	var title := Label.new()
-	title.text = "玩法说明"
-	style_title(title, 27)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vb.add_child(title)
-	var sub := Label.new()
-	sub.text = "四回合，把构筑组做到最大"
-	sub.add_theme_font_size_override("font_size", 13)
-	sub.add_theme_color_override("font_color", C_MUTED)
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vb.add_child(sub)
-	# 正文：两栏排布，1280×720 下整页可见，不需要滚动
-	var cols := HBoxContainer.new()
-	cols.add_theme_constant_override("separation", 22)
-	vb.add_child(cols)
-	var col_l := VBoxContainer.new()
-	var col_r := VBoxContainer.new()
-	for col in [col_l, col_r]:
-		col.custom_minimum_size = Vector2(336, 0)
-		col.add_theme_constant_override("separation", 2)
-		cols.add_child(col)
-	_rules_section(col_l, "目标", [
-		"四回合打完，构筑组每回合结算一次、分数累计，总分最高者胜。",
-	], 330)
-	_rules_section(col_l, "牌具", [
-		"· 数字牌 1–10，四花色各一张（2 人局只到 5）。",
-		"· 功能牌：弃 / 摸 / 杠，四花色各 2 套（2 人局 1 套）。",
-		"· 大小王各 1 张；开局抽出的那张决定本局「王的颜色」。",
-		"· 弃牌堆 1 抽空时洗回；弃牌堆 2 永不回洗、始终公开。",
-	], 330)
-	_rules_section(col_l, "每回合", [
-		"1. 发牌：第 1 回合每人 4 张（四花色各一）；之后每人补「当前空位数」张，其中 1 张用来固定。",
-		"2. 固定：每人固定 1 张进构筑组，永久保留、公开；第 1 回合固定的牌必须与王同色。",
-		"3. 效果牌：桌上摆「手牌最多者手牌数 + 人数」张；每人先弃 1 张回堆，剩下逐张结算——弃＝每人弃 1 张手牌进弃牌堆 2；摸＝每人摸 2 张；杠＝全员临时牌位 +1。",
-		"4. 结算：手牌填入构筑组空位（空位 = 4 − 已固定张数 + 临时牌位），多出的进弃牌堆 1，然后计分。",
-		"5. 清理：临时填入的牌进弃牌堆 1，临时牌位清零。",
-	], 330)
-	_rules_section(col_r, "计分", [
-		"基准分取四者最大：最大单张 / 最大对子和 / 最大三张和 / 最长顺子点数和（至少 3 张连续，等长取点数和更大的那段）。",
-		"之后依次相乘，每次向下取整：",
-		"· 同花 ×2、同色 ×1.2（取大者；至少 2 张才算，顺子被选为基准时只看顺子那几张）",
-		"· 最大牌是三张 ×3，是对子 ×2",
-		"· 其余牌里还有三张 ×2，有对子 ×1.5",
-		"· 与王同色 ×1.2：同花或同色命中一次，最大牌再单独命中一次",
-	], 330)
-	_rules_section(col_r, "3-2-5 翻盘", [
-		"构筑组首次同时出现 3、2、5 各一张，且本回合得分全场最低 → 本回合得分变成全场最高。每人整局只有一次。",
-	], 330)
-	_rules_section(col_r, "终局", [
-		"第 4 回合结束，或有人手牌被弃空、摸牌不够一圈、牌位已满 → 进入最终回合，本回合得分 ×1.5。",
-	], 330)
-	var close_row := HBoxContainer.new()
-	close_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	var close_btn := Button.new()
-	close_btn.text = "知道了"
-	close_btn.custom_minimum_size = Vector2(200, 40)
-	close_btn.add_theme_font_size_override("font_size", 17)
-	style_button(close_btn, true)
-	close_btn.pressed.connect(func() -> void: overlay.hide())
-	close_row.add_child(close_btn)
-	vb.add_child(close_row)
-	game.add_child(overlay)
-	game.move_child(overlay, game.get_child_count() - 1)
-	rules_popup = overlay
-
-
-## 玩法说明里的一节：鎏金小节标题 + 若干正文行
-func _rules_section(vb: VBoxContainer, heading: String, lines: Array, width := 690) -> void:
-	var h := Label.new()
-	h.text = heading
-	h.add_theme_font_size_override("font_size", 17)
-	h.add_theme_color_override("font_color", C_GOLD)
-	vb.add_child(h)
-	for t in lines:
-		var b := Label.new()
-		b.text = t
-		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		b.add_theme_font_size_override("font_size", 13)
-		b.add_theme_color_override("font_color", C_IVORY)
-		b.custom_minimum_size = Vector2(width, 0)
-		vb.add_child(b)
-	var gap := Control.new()
-	gap.custom_minimum_size = Vector2(0, 4)
-	vb.add_child(gap)
+func _rules_page():
+	if is_instance_valid(rules_popup):
+		return rules_popup
+	var page = (load("res://scenes/ui/rules_page.tscn") as PackedScene).instantiate()
+	game.add_child(page)
+	rules_popup = page
+	return page
 
 
 # ============================== 动画 ==============================
@@ -981,18 +785,6 @@ func refresh_labels() -> void:
 		joker_label.text = "  王：%s（%s色）" % [game.joker_card.txt(), "红" if game.joker_color == 1 else "黑"]
 	piles_label.text = "  抽牌堆 %d | 弃牌堆1 %d | 弃牌堆2 %d | 效果牌堆 %d" % [
 		game.number_pile.size(), game.discard1.size(), game.discard2.size(), game.jqk_pile.size()]
-	# 记分板：各家总分（按实际人数显隐）
-	for i in _score_row_boxes.size():
-		_score_row_boxes[i].visible = i < game.players.size()
-		if i >= game.players.size():
-			continue
-		var p: PPlayer = game.players[i]
-		_score_rows[i][0].text = "%s%s%s" % [p.pname,
-			" ［离线］" if p.dropped else "",
-			" ［终局×1.5］" if p.j_emptied else ""]
-		_score_rows[i][1].text = "  总分 %d" % p.score
-		_score_rows[i][1].add_theme_color_override("font_color",
-			Color(0.95, 0.85, 0.4) if p.is_human else Color(1, 1, 1))
 
 
 func refresh_all() -> void:
@@ -1003,113 +795,23 @@ func refresh_all() -> void:
 
 
 # ============================== 联机界面 ==============================
-func _build_net_section(ov_vb: VBoxContainer) -> void:
-	var sep := HSeparator.new()
-	sep.add_theme_color_override("separator", C_GOLD_DIM)
-	ov_vb.add_child(sep)
-	var net_lbl := Label.new()
-	net_lbl.text = "联机对战（2-6 人，主机权威）"
-	net_lbl.add_theme_color_override("font_color", C_GOLD)
-	net_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ov_vb.add_child(net_lbl)
-	var name_row := HBoxContainer.new()
-	name_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	_name_edit = LineEdit.new()
-	_name_edit.placeholder_text = "你的名字（重连凭它入座）"
-	_name_edit.custom_minimum_size = Vector2(212, 0)
-	style_input(_name_edit)
-	name_row.add_child(_name_edit)
-	ov_vb.add_child(name_row)
-	var addr_row := HBoxContainer.new()
-	addr_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	_ip_edit = LineEdit.new()
-	_ip_edit.text = "127.0.0.1"
-	_ip_edit.custom_minimum_size = Vector2(140, 0)
-	style_input(_ip_edit)
-	_port_edit = LineEdit.new()
-	_port_edit.text = str(NetSession.DEFAULT_PORT)
-	_port_edit.custom_minimum_size = Vector2(64, 0)
-	style_input(_port_edit)
-	addr_row.add_child(_ip_edit)
-	addr_row.add_child(_port_edit)
-	ov_vb.add_child(addr_row)
-	var btn_row := HBoxContainer.new()
-	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	var host_btn := Button.new()
-	host_btn.text = "创建主机"
-	host_btn.custom_minimum_size = Vector2(140, 36)
-	style_button(host_btn, true)
-	host_btn.pressed.connect(func() -> void:
-		host_requested.emit(int(_port_edit.text), _name_edit.text.strip_edges()))
-	var join_btn := Button.new()
-	join_btn.text = "加入主机"
-	join_btn.custom_minimum_size = Vector2(140, 36)
-	style_button(join_btn)
-	join_btn.pressed.connect(func() -> void:
-		join_requested.emit(_ip_edit.text, int(_port_edit.text), _name_edit.text.strip_edges()))
-	btn_row.add_child(host_btn)
-	btn_row.add_child(join_btn)
-	ov_vb.add_child(btn_row)
-
-
-func _build_lobby(parent: Control) -> void:
-	_lobby_card = PanelContainer.new()
-	style_panel(_lobby_card, 18)
-	_lobby_card.visible = false
-	var margin := MarginContainer.new()
-	for side in ["margin_left", "margin_right"]:
-		margin.add_theme_constant_override(side, 46)
-	for side in ["margin_top", "margin_bottom"]:
-		margin.add_theme_constant_override(side, 30)
-	_lobby_card.add_child(margin)
-	_lobby_box = VBoxContainer.new()
-	_lobby_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	_lobby_box.add_theme_constant_override("separation", 14)
-	margin.add_child(_lobby_box)
-	var title := Label.new()
-	title.text = "联机大厅"
-	style_title(title, 28)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lobby_box.add_child(title)
-	_lobby_list = Label.new()
-	_lobby_list.add_theme_color_override("font_color", C_IVORY)
-	_lobby_list.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lobby_box.add_child(_lobby_list)
-	_lobby_status = Label.new()
-	_lobby_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lobby_status.add_theme_color_override("font_color", C_GOLD)
-	_lobby_box.add_child(_lobby_status)
-	_start_net_btn = Button.new()
-	_start_net_btn.text = "开始联机"
-	_start_net_btn.custom_minimum_size = Vector2(240, 44)
-	style_button(_start_net_btn, true)
-	_start_net_btn.pressed.connect(func() -> void: start_net_requested.emit())
-	_lobby_box.add_child(_start_net_btn)
-	parent.add_child(_lobby_card)
-
-
 func show_lobby(i_am_host: bool) -> void:
-	_menu_box.visible = false
-	_lobby_card.visible = true
-	_start_net_btn.visible = i_am_host
-	_lobby_status.text = "" if i_am_host else "已连接，等待主机开始……"
+	if is_instance_valid(_menu):
+		_menu.show_lobby(i_am_host)
 
 
 func update_lobby(names: Array, i_am_host: bool) -> void:
-	if not is_instance_valid(_lobby_list):
-		return
-	_lobby_list.text = "已连接 %d 人：\n%s" % [names.size(), "\n".join(names)]
-	_start_net_btn.visible = i_am_host
-	_start_net_btn.disabled = names.size() < 2
+	if is_instance_valid(_menu):
+		_menu.update_lobby(names, i_am_host)
 
 
 func get_default_name() -> String:
-	return _name_edit.text.strip_edges() if is_instance_valid(_name_edit) else ""
+	return _menu.get_default_name() if is_instance_valid(_menu) else ""
 
 
 func set_default_name(pname: String) -> void:
-	if is_instance_valid(_name_edit) and pname != "":
-		_name_edit.text = pname
+	if is_instance_valid(_menu):
+		_menu.set_default_name(pname)
 
 
 func show_reconnect(v: bool) -> void:
@@ -1126,5 +828,88 @@ func set_log_lines(lines: Array) -> void:
 
 
 func set_lobby_status(t: String) -> void:
-	if is_instance_valid(_lobby_status):
-		_lobby_status.text = t
+	if is_instance_valid(_menu):
+		_menu.set_lobby_status(t)
+
+
+# ============================== 终局 ==============================
+var _end_banner: PanelContainer
+
+
+## 终局 ×1.5：最后一回合加完分，所有分板整体放大一次
+func anim_final_boost() -> void:
+	if game.SIM or game.AUTO:
+		return
+	for e in _strips:
+		var lab := _strip_label(e.idx)
+		lab.pivot_offset = lab.size * 0.5
+		var tw := lab.create_tween()
+		tw.tween_property(lab, "scale", Vector2(1.5, 1.5), 0.18).set_trans(Tween.TRANS_BACK)
+		tw.tween_property(lab, "scale", Vector2.ONE, 0.32)
+	await game.get_tree().create_timer(0.42).timeout
+
+
+## 终局提示：屏幕正中一块面板，压在手牌区上方，按钮在面板里
+func show_end_banner(text: String, can_restart: bool) -> void:
+	if game.SIM:
+		return
+	if is_instance_valid(_end_banner):
+		_end_banner.get_parent().remove_child(_end_banner)
+		_end_banner.queue_free()
+	prompt_label.visible = false
+	if is_instance_valid(restart_btn):
+		restart_btn.visible = false   # 面板里已经有一个重新开始，底部那个先收起来
+
+	var wrap := CenterContainer.new()
+	wrap.mouse_filter = Control.MOUSE_FILTER_PASS
+	wrap.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	wrap.offset_top = 500.0   # 压在手牌区：终局手牌已清空，不挡任何人的分板
+	wrap.z_index = 60
+	var card := PanelContainer.new()
+	card.theme_type_variation = &"Card"
+	card.add_theme_stylebox_override("panel", _sb(Color(0.035, 0.07, 0.055, 0.97), Color(0.85, 0.70, 0.32, 0.55), 18))
+	card.custom_minimum_size = Vector2(440, 0)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_top", 18)
+	margin.add_theme_constant_override("margin_bottom", 16)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 10)
+	var title := Label.new()
+	title.text = text
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", C_GOLD)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	var btn := Button.new()
+	btn.text = "重新开始"
+	btn.theme_type_variation = &"AccentButton"
+	btn.custom_minimum_size = Vector2(150, 36)
+	btn.add_theme_font_size_override("font_size", 15)
+	btn.pressed.connect(func() -> void: restart_requested.emit())
+	btn.visible = can_restart
+	row.add_child(btn)
+	vb.add_child(title)
+	vb.add_child(row)
+	margin.add_child(vb)
+	card.add_child(margin)
+	wrap.add_child(card)
+	game.add_child(wrap)
+	_end_banner = card
+	card.modulate.a = 0.0
+	var tw: Tween = game.create_tween()
+	tw.tween_property(card, "modulate:a", 1.0, 0.22)
+
+
+func hide_end_banner() -> void:
+	if is_instance_valid(_end_banner):
+		var p := _end_banner.get_parent()
+		if p != null:
+			p.get_parent().remove_child(p)
+			p.queue_free()
+		_end_banner = null
+	if is_instance_valid(prompt_label):
+		prompt_label.visible = true
