@@ -352,18 +352,20 @@ func _phase_deal() -> void:
 			_refresh_all()
 			await _pause(0.4)
 	else:
-		# 每人按各自空位补牌，无花色限制；最终回合每人发 2 张；不够则全不发
+		# 每人按各自空位补牌（空位 + 1 张留给固定），无花色限制；
+		# 最终回合至少 2 张：即使牌位已满，也能靠「杠」给的临时牌位用上第二张
+		var is_final := _is_final_round()
 		var needs: Array = []
 		var total := 0
 		for p in players:
-			var n: int = 2 if round_num >= 4 else maxi(p.perm_slots(), 0)
+			var n: int = maxi(p.perm_slots(), 2 if is_final else 0)
 			needs.append(n)
 			total += n
 		if _pool_size() < total:
 			glog("剩余牌不足补牌（需 %d 张）→ 本回合所有人不发牌" % total)
 			return
-		if round_num >= 4:
-			glog("最终回合：每人发 2 张（无花色限制）")
+		if is_final:
+			glog("最终回合：每人按空位补牌、至少 2 张（无花色限制）")
 		else:
 			glog("每人按空位补牌（无花色限制）")
 		var max_n: int = needs.max()
@@ -675,7 +677,8 @@ func _request_pick(zone: String, p: PPlayer, n: int, filter: Callable) -> Array:
 			if legal.is_empty():
 				return []
 			if n <= 1:
-				return [CardAI.pick_one(p, "fix", legal, joker_color)]
+				# 桌上效果牌按「弃效果牌」选，手牌单张按「固定」选
+				return [CardAI.pick_one(p, "eff" if zone == "table" else "fix", legal, joker_color)]
 			return CardAI.pick_many(p, "fill", legal, n, joker_color)
 		var picked: Array = []
 		for id in ids:
@@ -878,11 +881,11 @@ func _run_usertest() -> void:
 	db.record_game("测试甲", 100, true)
 	db.record_game("测试甲", 130, false)
 	var st := db.stats_of("测试甲")
-	ck.call(int(st.games) == 2 and int(st.wins) == 1 and int(st.best) == 130 and int(st.last) == 130, "stats")
+	ck.call(int(st.get("games", 0)) == 2 and int(st.get("wins", 0)) == 1 and int(st.get("best", 0)) == 130 and int(st.get("last", 0)) == 130, "stats")
 	# 落盘持久化：换实例重读
 	var db2 := UserDB.new(db_path, ss_path)
 	ck.call(db2.login("测试甲", "1234") == "", "reload login")
-	ck.call(int(db2.stats_of("测试甲").games) == 2, "reload stats")
+	ck.call(int(db2.stats_of("测试甲").get("games", 0)) == 2, "reload stats")
 	# 密码不明文落盘
 	var raw := FileAccess.open(db_path, FileAccess.READ).get_as_text()
 	ck.call(raw.find("1234") < 0, "no plaintext pwd")

@@ -23,18 +23,18 @@ static func score_build(cards: Array, joker_color: int) -> Dictionary:
 	for r in ranks:
 		freq[r] = freq.get(r, 0) + 1
 
-	# 顺子检测（去重后最长连续序列）
+	# 顺子检测（去重后最长连续序列；等长时取点数和更大的那段）
 	var best: Array = []
 	var cur: Array = []
 	for i in uniq.size():
 		if i > 0 and uniq[i] == uniq[i - 1] + 1:
 			cur.append(uniq[i])
 		else:
-			if cur.size() > best.size():
-				best = cur
+			if _run_better(cur, best):
+				best = cur.duplicate()
 			cur = [uniq[i]]
-	if cur.size() > best.size():
-		best = cur
+	if _run_better(cur, best):
+		best = cur.duplicate()
 	var straight_sum := 0
 	if best.size() >= 3:
 		for r in best:
@@ -79,6 +79,10 @@ static func score_build(cards: Array, joker_color: int) -> Dictionary:
 			same_suit = false
 		if c.color() != col0:
 			same_color = false
+	# 单张不构成同花/同色（同花至少两张），否则任何单张都会被白送 ×2
+	if scope.size() < 2:
+		same_suit = false
+		same_color = false
 	if same_suit:
 		pts = floori(pts * 2.0)
 		notes.append("同花×2")
@@ -115,11 +119,11 @@ static func score_build(cards: Array, joker_color: int) -> Dictionary:
 		pts = floori(pts * 1.5)
 		notes.append("其余对子×1.5")
 
-	# 与王同色（各自叠算）
+	# 与王同色（同花/同色只取大者叠一次，避免同一属性乘两遍）
 	if same_suit and col0 == joker_color:
 		pts = floori(pts * 1.2)
 		notes.append("同花与王同色×1.2")
-	if same_color and col0 == joker_color:
+	elif same_color and col0 == joker_color:
 		pts = floori(pts * 1.2)
 		notes.append("同色与王同色×1.2")
 	if top_card != null and top_card.color() == joker_color:
@@ -127,6 +131,19 @@ static func score_build(cards: Array, joker_color: int) -> Dictionary:
 		notes.append("最大牌与王同色×1.2")
 
 	return {"pts": pts, "text": " × ".join(notes)}
+
+
+## 顺子候选比较：先比长度，等长时比点数和（取更大的那段）
+static func _run_better(a: Array, b: Array) -> bool:
+	if a.size() != b.size():
+		return a.size() > b.size()
+	var sa := 0
+	for r in a:
+		sa += r
+	var sb := 0
+	for r in b:
+		sb += r
+	return sa > sb
 
 
 ## 构筑组是否包含点数 3、2、5 各至少一张

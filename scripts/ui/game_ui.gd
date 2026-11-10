@@ -35,6 +35,7 @@ var log_popup: PanelContainer   # 日志弹窗
 var d2_popup: PanelContainer    # 弃牌堆2 查看弹窗
 var d2_title: Label
 var d2_flow: HFlowContainer
+var rules_popup: PanelContainer    # 玩法说明页（首页入口打开，懒构建）
 var confirm_btn: Button
 var restart_btn: Button
 
@@ -389,14 +390,14 @@ func _build_start_overlay() -> void:
 	for side in ["margin_left", "margin_right"]:
 		margin.add_theme_constant_override(side, 46)
 	for side in ["margin_top", "margin_bottom"]:
-		margin.add_theme_constant_override(side, 30)
+		margin.add_theme_constant_override(side, 22)
 	card.add_child(margin)
 	var ov_vb := VBoxContainer.new()
-	ov_vb.add_theme_constant_override("separation", 14)
+	ov_vb.add_theme_constant_override("separation", 10)
 	margin.add_child(ov_vb)
 	var title := Label.new()
 	title.text = "我说推扑克特别有说法"
-	style_title(title, 38)
+	style_title(title, 34)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ov_vb.add_child(title)
 	var subtitle := Label.new()
@@ -438,12 +439,23 @@ func _build_start_overlay() -> void:
 	for d in btn_defs:
 		var b := Button.new()
 		b.text = d[1]
-		b.custom_minimum_size = Vector2(320, 46)
+		b.custom_minimum_size = Vector2(320, 42)
 		b.add_theme_font_size_override("font_size", 18)
 		style_button(b, d[0] == "hard")  # 智能择为主推，给主行动色
 		var key: String = d[0]
 		b.pressed.connect(func() -> void: difficulty_chosen.emit(key))
 		ov_vb.add_child(b)
+	# 玩法说明入口（只读页面，不打断开局流程）
+	var rules_row := HBoxContainer.new()
+	rules_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	var rules_btn := Button.new()
+	rules_btn.text = "玩法说明"
+	rules_btn.custom_minimum_size = Vector2(150, 34)
+	rules_btn.add_theme_font_size_override("font_size", 15)
+	style_button(rules_btn)
+	rules_btn.pressed.connect(show_rules)
+	rules_row.add_child(rules_btn)
+	ov_vb.add_child(rules_row)
 	_menu_box = card
 	_build_net_section(ov_vb)
 	_build_lobby(center)
@@ -537,7 +549,8 @@ func build_strips() -> void:
 		_strips.remove_at(i)
 	_rotated.clear()
 	var opponents := player_count - 1
-	var top_n: int = opponents if opponents <= 1 else opponents - 2
+	# 3 人局（对手 2）没有左右余量，两个都排上沿；4 人以上才分左右两侧
+	var top_n: int = opponents if opponents <= 2 else opponents - 2
 	for i in top_n:
 		_make_build_strip(1 + i, 0.55, 0.0, _wrap_top)
 	if opponents >= 3:
@@ -693,11 +706,129 @@ func toggle_log() -> void:
 
 func show_d2() -> void:
 	for ch in d2_flow.get_children():
+		d2_flow.remove_child(ch)
 		ch.queue_free()
 	d2_title.text = "弃牌堆2（始终公开，共 %d 张）" % game.discard2.size()
 	for c in game.discard2:
 		d2_flow.add_child(_mini_card_tex(c))
 	d2_popup.show()
+
+
+# ============================== 玩法说明 ==============================
+## 首页「玩法说明」入口：只读页面，首次点击时才构建
+func show_rules() -> void:
+	if rules_popup == null or not is_instance_valid(rules_popup):
+		_build_rules_page()
+	rules_popup.show()
+	rules_popup.move_to_front()
+
+
+func _build_rules_page() -> void:
+	var overlay := PanelContainer.new()
+	overlay.name = "RulesOverlay"
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var scrim := StyleBoxFlat.new()
+	scrim.bg_color = Color(0.01, 0.03, 0.02, 0.86)
+	overlay.add_theme_stylebox_override("panel", scrim)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+	var card := PanelContainer.new()
+	style_panel(card, 18)
+	center.add_child(card)
+	var margin := MarginContainer.new()
+	for side in ["margin_left", "margin_right"]:
+		margin.add_theme_constant_override(side, 28)
+	for side in ["margin_top", "margin_bottom"]:
+		margin.add_theme_constant_override(side, 16)
+	card.add_child(margin)
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 8)
+	margin.add_child(vb)
+	var title := Label.new()
+	title.text = "玩法说明"
+	style_title(title, 27)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(title)
+	var sub := Label.new()
+	sub.text = "四回合，把构筑组做到最大"
+	sub.add_theme_font_size_override("font_size", 13)
+	sub.add_theme_color_override("font_color", C_MUTED)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(sub)
+	# 正文：两栏排布，1280×720 下整页可见，不需要滚动
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 22)
+	vb.add_child(cols)
+	var col_l := VBoxContainer.new()
+	var col_r := VBoxContainer.new()
+	for col in [col_l, col_r]:
+		col.custom_minimum_size = Vector2(336, 0)
+		col.add_theme_constant_override("separation", 2)
+		cols.add_child(col)
+	_rules_section(col_l, "目标", [
+		"四回合打完，构筑组每回合结算一次、分数累计，总分最高者胜。",
+	], 330)
+	_rules_section(col_l, "牌具", [
+		"· 数字牌 1–10，四花色各一张（2 人局只到 5）。",
+		"· 功能牌：弃 / 摸 / 杠，四花色各 2 套（2 人局 1 套）。",
+		"· 大小王各 1 张；开局抽出的那张决定本局「王的颜色」。",
+		"· 弃牌堆 1 抽空时洗回；弃牌堆 2 永不回洗、始终公开。",
+	], 330)
+	_rules_section(col_l, "每回合", [
+		"1. 发牌：第 1 回合每人 4 张（四花色各一）；之后每人补「当前空位数」张，其中 1 张用来固定。",
+		"2. 固定：每人固定 1 张进构筑组，永久保留、公开；第 1 回合固定的牌必须与王同色。",
+		"3. 效果牌：桌上摆「手牌最多者手牌数 + 人数」张；每人先弃 1 张回堆，剩下逐张结算——弃＝每人弃 1 张手牌进弃牌堆 2；摸＝每人摸 2 张；杠＝全员临时牌位 +1。",
+		"4. 结算：手牌填入构筑组空位（空位 = 4 − 已固定张数 + 临时牌位），多出的进弃牌堆 1，然后计分。",
+		"5. 清理：临时填入的牌进弃牌堆 1，临时牌位清零。",
+	], 330)
+	_rules_section(col_r, "计分", [
+		"基准分取四者最大：最大单张 / 最大对子和 / 最大三张和 / 最长顺子点数和（至少 3 张连续，等长取点数和更大的那段）。",
+		"之后依次相乘，每次向下取整：",
+		"· 同花 ×2、同色 ×1.2（取大者；至少 2 张才算，顺子被选为基准时只看顺子那几张）",
+		"· 最大牌是三张 ×3，是对子 ×2",
+		"· 其余牌里还有三张 ×2，有对子 ×1.5",
+		"· 与王同色 ×1.2：同花或同色命中一次，最大牌再单独命中一次",
+	], 330)
+	_rules_section(col_r, "3-2-5 翻盘", [
+		"构筑组首次同时出现 3、2、5 各一张，且本回合得分全场最低 → 本回合得分变成全场最高。每人整局只有一次。",
+	], 330)
+	_rules_section(col_r, "终局", [
+		"第 4 回合结束，或有人手牌被弃空、摸牌不够一圈、牌位已满 → 进入最终回合，本回合得分 ×1.5。",
+	], 330)
+	var close_row := HBoxContainer.new()
+	close_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	var close_btn := Button.new()
+	close_btn.text = "知道了"
+	close_btn.custom_minimum_size = Vector2(200, 40)
+	close_btn.add_theme_font_size_override("font_size", 17)
+	style_button(close_btn, true)
+	close_btn.pressed.connect(func() -> void: overlay.hide())
+	close_row.add_child(close_btn)
+	vb.add_child(close_row)
+	game.add_child(overlay)
+	game.move_child(overlay, game.get_child_count() - 1)
+	rules_popup = overlay
+
+
+## 玩法说明里的一节：鎏金小节标题 + 若干正文行
+func _rules_section(vb: VBoxContainer, heading: String, lines: Array, width := 690) -> void:
+	var h := Label.new()
+	h.text = heading
+	h.add_theme_font_size_override("font_size", 17)
+	h.add_theme_color_override("font_color", C_GOLD)
+	vb.add_child(h)
+	for t in lines:
+		var b := Label.new()
+		b.text = t
+		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		b.add_theme_font_size_override("font_size", 13)
+		b.add_theme_color_override("font_color", C_IVORY)
+		b.custom_minimum_size = Vector2(width, 0)
+		vb.add_child(b)
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 4)
+	vb.add_child(gap)
 
 
 # ============================== 动画 ==============================
@@ -835,6 +966,7 @@ func refresh_table(clickable: bool) -> void:
 	if game.SIM:
 		return
 	for ch in table_row.get_children():
+		table_row.remove_child(ch)
 		ch.queue_free()
 	for c in game.table_cards:
 		table_row.add_child(_card_btn(c, "table", clickable))

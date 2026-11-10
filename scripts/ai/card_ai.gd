@@ -46,14 +46,15 @@ static func pick_many(p: PPlayer, kind: String, legal: Array, n: int, joker_colo
 	match p.strat:
 		"greedy":
 			# 枚举所有 n 张组合（组合数可控时），取构筑组得分最高
+			# 注意：lambda 对外部标量是按值捕获，回写不生效，所以用数组当累加器
 			if legal.size() <= 9 and n <= 5:
-				var best_combo: Array = []
-				var best_v := -1
+				var acc: Array = [[], -1]
 				_enum_combos(legal, n, 0, [], func(combo: Array) -> void:
 					var v := _deck_score(p.build + combo, joker_color)
-					if v > best_v:
-						best_v = v
-						best_combo = combo)
+					if v > int(acc[1]):
+						acc[0] = combo.duplicate()
+						acc[1] = v)
+				var best_combo: Array = acc[0]
 				return best_combo.duplicate()
 			# 退化：按点数贪心
 			return _top_n_by_rank(legal, n)

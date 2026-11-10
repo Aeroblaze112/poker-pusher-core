@@ -67,6 +67,7 @@ func register(pname: String, pwd: String) -> String:
 ## 登录。返回 "" 表示成功，否则为错误原因
 func login(pname: String, pwd: String) -> String:
 	pname = pname.strip_edges()
+	load_db()  # 多实例共享同一存档：先读最新再校验，避免误报「用户不存在」
 	if not users.has(pname):
 		return "用户不存在"
 	var u: Dictionary = users[pname]
