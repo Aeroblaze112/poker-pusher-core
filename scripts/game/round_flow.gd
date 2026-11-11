@@ -3,6 +3,8 @@ extends RefCounted
 ## 一回合的五个阶段：发牌 → 固定 → 效果牌 → 结算 → 清理。
 ## 这里只写流程，牌堆、玩家、UI 都是主控的（game 上）。
 
+const Audio := preload("res://scripts/game/audio.gd")
+
 var game   # 主控 DemoGame，取 players / 牌堆 / ui / 日志用
 
 
@@ -172,6 +174,7 @@ func fix() -> void:
 		game._refresh_all()
 		if not (game.SIM or game.AUTO):
 			await game.ui.fly(game.ui.card_tex(chosen), game.ui.player_center(p), game.ui.center_of(game.ui.strip_of(game.players.find(p))), 0.4)
+			Audio.play("fix")
 			await game.ui.anim_fix(game.players.find(p))
 		await game._pause(0.45)
 
@@ -359,6 +362,7 @@ func settle() -> void:
 		game.glog("%s 本回合得分 %d（%s）→ 总分 %d" % [p.pname, r.pts, r.text, p.score])
 		game._refresh_all()
 		if not (game.SIM or game.AUTO) and r.pts > 0:
+			Audio.play("gain", -2.0)
 			await game.ui.anim_score_gain(game.players.find(p), r.pts, game.ui.C_GOLD if r.pts == round_max else game.ui.C_IVORY)
 		await game._pause(0.2)
 

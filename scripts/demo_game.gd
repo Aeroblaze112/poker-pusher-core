@@ -12,6 +12,7 @@ extends Control
 const CliOptions := preload("res://scripts/dev/cli_options.gd")
 const UserSelftest := preload("res://scripts/dev/user_selftest.gd")
 const GameSettings := preload("res://scripts/game/game_settings.gd")
+const Audio := preload("res://scripts/game/audio.gd")
 const Deck := preload("res://scripts/game/deck.gd")
 const UserSession := preload("res://scripts/game/user_session.gd")
 const RoundFlow := preload("res://scripts/game/round_flow.gd")
@@ -798,6 +799,7 @@ func _show_end() -> void:
 	glog("获胜者：%s" % "、".join(winners))
 	set_prompt("游戏结束！获胜者：%s" % "、".join(winners))
 	_record_my_stats()
+	Audio.play("win" if players[0].score == best else "lose")
 	ui.restart_btn.visible = (net_role != NET_CLIENT)  # 联机由主机一键重开（沿用名册）
 	ui.show_end_banner("游戏结束！\n获胜者：%s\n你的总分：%d" % ["、".join(winners), players[0].score], net_role != NET_CLIENT)
 	_refresh_all()  # 广播终局快照，让客户端拿到 game_over
@@ -897,16 +899,19 @@ func _refresh_hand() -> void:
 func _anim_deal(p: PPlayer) -> void:
 	if SIM or AUTO:
 		return
+	Audio.play("deal", -4.0)
 	await ui.anim_deal(p)
 
 
 func _anim_discard(p: PPlayer, c: PCard) -> void:
 	if SIM or AUTO:
 		return
+	Audio.play("flip", -4.0)
 	await ui.anim_discard(p, c)
 
 
 func _anim_effect_pulse(c: PCard) -> void:
 	if SIM or AUTO:
 		return
+	Audio.play("flip", -2.0)
 	await ui.anim_effect_pulse(c)

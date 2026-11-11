@@ -25,6 +25,31 @@ Windows 下渲染后端在 `project.godot` 里固定为 D3D12，要换 Vulkan �
 
 桌面按人数各排各的：2 人对坐，4 人三面，5 人 U 形（对面空着），6 人六边形。每个人的构筑组和总分贴在自己那块框旁边，底下没有大记分板。
 
+## 首页三个入口
+
+- **玩法说明**：规则全文，一条一条对着代码核对过
+- **战绩**：登录后看累计场次 / 胜率 / 最佳分，以及最近 8 局的得分和胜负（每局记一条，最多留 30 条）
+- **设置**：主音量、全屏、窗口尺寸（1280×720 / 1600×900 / 1920×1080 / 2560×1440），改完立刻生效，写进 `user://settings.cfg`，下次启动沿用
+
+## 声音
+
+代码里的调用点已经接好（发牌、固定、翻面、摸牌、加分、终局胜负），**但还没有素材，所以现在完全静音**。
+
+要出声，把文件丢进 `assets/audio/`，文件名对上下面这几个就行，不用改代码：
+
+```
+assets/audio/deal.ogg    发牌
+assets/audio/fix.ogg     固定进构筑组
+assets/audio/flip.ogg    弃牌 / 效果牌翻面
+assets/audio/draw.ogg    摸牌
+assets/audio/gain.ogg    结算加分
+assets/audio/win.ogg     获胜
+assets/audio/lose.ogg    没赢
+assets/audio/click.ogg   按钮（暂未接）
+```
+
+ogg、wav、mp3 都认，找 `.ogg` 优先。入口在 `scripts/game/audio.gd`：`Audio.play("deal")`、`Audio.play_bgm("theme")`、`Audio.stop_bgm()`。音量走 Master 总线，设置页那个滑块就是在调它。
+
 ## 联机
 
 - 同一局域网，一方点「创建主机」，其他人填主机 IP 加入，默认端口 8910
@@ -37,11 +62,13 @@ Windows 下渲染后端在 `project.godot` 里固定为 D3D12，要换 Vulkan �
 
 ```
 scenes/demo.tscn            唯一启动场景，根节点挂 scripts/demo_game.gd
-scenes/ui/                  board（牌桌）/ start_menu（开局菜单）/ rules_page（玩法说明）/ build_strip（构筑框）
+scenes/ui/                  board（牌桌）/ start_menu（开局菜单）/ rules_page（玩法说明）/ build_strip（构筑框）/ stats_page / settings_page
 scripts/demo_game.gd        编排：开局、主循环、联机协调、UI 代理
 scripts/game/deck.gd        按人数造牌（纯静态）
 scripts/game/round_flow.gd  回合五阶段
 scripts/game/user_session.gd 本地账号会话
+scripts/game/game_settings.gd 音量 / 全屏 / 窗口尺寸的读写与应用
+scripts/game/audio.gd       音效入口（素材未接入，静默）
 scripts/ui/game_ui.gd       UI 门面：持场景实例、刷数据、播动效
 scripts/rules/scoring.gd    计分（全静态函数，可单独调用测试）
 scripts/ai/card_ai.gd       AI 选牌：random / high / high2 / greedy
@@ -49,6 +76,7 @@ scripts/net/net_session.gd  ENet 传输层
 scripts/data/               牌、玩家、本地账号库（存 user:// 下的 JSON，不入库）
 themes/casino_theme.tres    按钮四态、面板变体、输入框、分隔线
 assets/ui/                  牌面、牌位、背景贴图
+assets/audio/               音效（空目录，放进去就出声）
 ```
 
 样式统一在 `themes/casino_theme.tres` 里改，代码里不再手写按钮描边；需要变体就加 `theme_type_variation`（`AccentButton`、`Card`、`Scrim` 等）。
@@ -91,4 +119,5 @@ build.cmd
 
 - 联机只在本机的 `127.0.0.1` 上验证过，跨机器（防火墙、局域网）还没实测，不保证一定能用
 - 5 / 6 人的桌面布局只做过自动对局和截图检查，没经过真人长时间对局
-- 存档和战绩写在 `user://` 下，重装或换机会丢
+- 没有音效素材，游戏是静音的（入口见上面「声音」一节）
+- 存档、战绩、设置都写在 `user://` 下，重装或换机会丢
