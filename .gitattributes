@@ -1,2 +1,5 @@
-# Normalize EOL for all files that Git considers text files.
+# Godot 项目里没几个需要 CRLF 的文件，但 Windows 批处理必须是 CRLF，
+# 否则 cmd.exe 会把整行解析错、卡住不返回。
 * text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
